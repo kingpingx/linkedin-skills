@@ -232,6 +232,7 @@
     state.selected = id;
     expanded = false;
     save();
+    try { history.replaceState(null, "", "#" + id); } catch (e) { /* file:// in some browsers */ }
     renderAll();
   }
 
@@ -329,7 +330,10 @@
 
   // ---------- boot ----------
   $("weekLabel").textContent = PLAN.week.label + " · times in " + PLAN.week.timezone;
-  if (!find(state.selected)) {
+  const fromHash = find(decodeURIComponent(location.hash.slice(1)));
+  if (fromHash) {
+    state.selected = fromHash.id;
+  } else if (!find(state.selected)) {
     const today = PLAN.days.find((d) => d.date === todayISO());
     state.selected = (today || weekPosts()[0] || PLAN.days[0]).id;
   }
