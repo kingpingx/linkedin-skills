@@ -1,0 +1,32 @@
+# LinkedIn Week Planner
+
+A small static web app for planning and tracking a week of LinkedIn posts.
+
+- **Week view** with each day's post time, goal, and status (draft, ready, scheduled, posted)
+- **Editor + feed preview** showing where LinkedIn's "…see more" cut lands
+- **Built-in checks**: unfilled `[placeholders]`, length (900–1,300 sweet spot, 3,000 limit), question opener, closing question, em dashes, hashtag count, links in the body
+- **Comment tracker**: daily target and who to comment on
+- **Weekly checklist** and progress
+- **Export JSON** of the week's final texts and statuses
+
+No build step and no dependencies: plain HTML, CSS, and JavaScript.
+
+## Run it
+
+Open `index.html` in a browser, or serve the folder:
+
+```bash
+npx serve .
+```
+
+## Host it on GitHub Pages
+
+Repository **Settings → Pages → Build and deployment → Deploy from a branch**, pick `main` and `/ (root)`.
+
+## Plan a new week
+
+Edit `data.js`: change `week.start`, the `days`, and the post texts. Edits you make in the browser are saved in `localStorage` per week (keyed by `week.start`), so a new week starts clean.
+
+## Privacy
+
+Everything stays in your browser. Nothing is sent anywhere, and no API keys are used.
