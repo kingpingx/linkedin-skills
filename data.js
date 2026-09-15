@@ -94,9 +94,17 @@ I've watched most of this timeline from inside one codebase. The video analytics
 
 Now the same "it's over" talk is about developers and AI.
 
-I don't think we need to fear it. We need to grow with it, the way you upgrade a framework: one version at a time.
+I don't think we need to fear it. The real risk is using it just to get answers. Used well, it can help us learn faster.
 
-Learn a little, use it in real work, then take the next step. Each step teaches you something the next one builds on. Jump straight to the newest thing and you skip those steps, and the gaps show up later.
+A few habits that help:
+
+→ When AI fixes a bug, ask it why the fix works.
+
+→ Read every line it writes before you ship it.
+
+→ Try the next change yourself first, then ask AI to review it.
+
+It's the same idea as upgrading a framework one version at a time. Each small step teaches you something the next one builds on. If AI takes you straight to the answer every time, you skip those steps, and the gaps show up later.
 
 What's the most confident "X is dead" prediction you've seen in tech?
 
