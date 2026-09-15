@@ -37,7 +37,9 @@ Each post has an **Image** section:
 
 Tick or untick **Attach image to this post** to post with or without it. The feed preview shows the image under the text.
 
-Your own images are stored in this browser (IndexedDB), so they survive a refresh but not a different browser. Scheduling tools such as Publora need a **hosted link**, so before scheduling a post with your own image, upload it somewhere public and paste that link in.
+When the planner runs through `python serve.py`, your own images are saved as base64 in **`images.json`** next to the app: one image per post, a new upload replaces the old one, and **Remove image** deletes it. A scheduler can read the image straight from that file and upload it to Publora's media storage (draft, upload, then schedule), so no public hosting is needed. `images.json` is git-ignored.
+
+Opened without the server (straight from the file, or on GitHub Pages), your images stay in this browser's IndexedDB instead, and the planner reminds you to run `serve.py` before scheduling.
 
 ## Privacy
 

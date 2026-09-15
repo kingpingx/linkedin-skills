@@ -151,14 +151,41 @@
       };
     });
   }
-  const imgKey = (id) => KEY + ":" + id;
-  const saveImage = (id, blob) => idb("readwrite", (s) => s.put(blob, imgKey(id)));
+  const imgKey = (id) => KEY + ":" + id;              // IndexedDB key
+  const fileKey = (id) => PLAN.week.start + ":" + id; // images.json key
+  // With `python serve.py`, your own images are saved as base64 in images.json
+  // (one per post, replaced on a new upload). Without it, they stay in this browser.
+  let fileStore = false;
   const loadImage = (id) => idb("readonly", (s) => s.get(imgKey(id)));
+  function toBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(",")[1]);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+  function fromBase64(b64, type) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type });
+  }
+  async function saveImage(id, file) {
+    if (!fileStore) return idb("readwrite", (s) => s.put(file, imgKey(id)));
+    const res = await fetch("api/images/" + encodeURIComponent(fileKey(id)), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name, type: file.type, size: file.size, data: await toBase64(file) }),
+    });
+    if (!res.ok) throw new Error("save failed: " + res.status);
+  }
   function dropLocal(id) {
     if (localUrls[id]) {
       URL.revokeObjectURL(localUrls[id]);
       delete localUrls[id];
     }
+    if (fileStore) fetch("api/images/" + encodeURIComponent(fileKey(id)), { method: "DELETE" }).catch(() => {});
     idb("readwrite", (s) => s.delete(imgKey(id))).catch(() => {});
   }
   function useOwnImage(d, file) {
@@ -171,7 +198,7 @@
     localUrls[d.id] = URL.createObjectURL(file);
     setPost(d.id, { image: "local:" + file.name, imageSize: file.size, attach: true });
     saveImage(d.id, file).catch(() => {
-      $("imgMsg").textContent = "Couldn't save the image in this browser, so it will be gone after a refresh.";
+      $("imgMsg").textContent = "Couldn't save the image, so it will be gone after a refresh.";
     });
     $("imgUrl").value = "";
     updateAnalysis(d);
@@ -391,7 +418,9 @@
     const size = (state.posts[d.id] && state.posts[d.id].imageSize) || 0;
     const checks = a.checks.slice();
     if (attach) checks.push({ level: "ok", msg: local ? "Your own image attached" : "Image attached" });
-    if (attach && local) checks.push({ level: "warn", msg: "Your own image needs a hosted link before it can be scheduled (see README)" });
+    if (attach && local) checks.push(fileStore
+      ? { level: "ok", msg: "Saved in images.json, ready to upload when scheduled" }
+      : { level: "warn", msg: "Saved in this browser only. Run python serve.py so it's saved to images.json and can be scheduled" });
     if (attach && local && size > 5 * 1024 * 1024) checks.push({ level: "warn", msg: "Image is over 5 MB; LinkedIn may reject it" });
     if (!attach && /image/i.test(d.format || "")) checks.push({ level: "warn", msg: "Planned with an image, but none is attached" });
     $("checks").innerHTML = checks.map((c) => '<li class="' + c.level + '">' + esc(c.msg) + "</li>").join("");
@@ -409,7 +438,8 @@
       thumb.classList.toggle("dim", !attach);
       if (local) {
         $("imgMsg").textContent = "Your image: " + img.slice(6) +
-          (size ? " (" + (size / 1024 / 1024).toFixed(1) + " MB)" : "") + ". Saved in this browser only.";
+          (size ? " (" + (size / 1024 / 1024).toFixed(1) + " MB)" : "") +
+          (fileStore ? ". Saved in images.json." : ". Saved in this browser only.");
       }
     } else if (img) {
       thumb.hidden = true;
@@ -767,13 +797,37 @@
     }
   });
 
-  // Bring back your own images saved in IndexedDB.
-  items().forEach((p) => {
-    if (!isLocal(imageOf(p))) return;
-    loadImage(p.id).then((blob) => {
-      if (!blob) return;
-      localUrls[p.id] = URL.createObjectURL(blob);
-      if (state.selected === p.id) updateAnalysis(p);
-    }).catch(() => {});
-  });
+  // Bring back your own images: from images.json when serve.py is running,
+  // otherwise from this browser's IndexedDB.
+  function showRestored(p, blob) {
+    if (!blob) return;
+    localUrls[p.id] = URL.createObjectURL(blob);
+    if (state.selected === p.id) updateAnalysis(p);
+  }
+  fetch("api/images", { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+    .then((saved) => {
+      fileStore = true;
+      items().forEach((p) => {
+        if (!isLocal(imageOf(p))) return;
+        const entry = saved[fileKey(p.id)];
+        if (entry) {
+          showRestored(p, fromBase64(entry.data, entry.type));
+          return;
+        }
+        // Uploaded before images.json existed: move it over.
+        loadImage(p.id).then((blob) => {
+          if (!blob) return;
+          showRestored(p, blob);
+          saveImage(p.id, new File([blob], imageOf(p).slice(6), { type: blob.type })).catch(() => {});
+        }).catch(() => {});
+      });
+      const d = find(state.selected);
+      if (d && $("postText")) updateAnalysis(d);
+    })
+    .catch(() => {
+      items().forEach((p) => {
+        if (isLocal(imageOf(p))) loadImage(p.id).then((blob) => showRestored(p, blob)).catch(() => {});
+      });
+    });
 })();
