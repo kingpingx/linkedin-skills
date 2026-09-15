@@ -7,7 +7,7 @@ re-exported here.
 """
 from ._env import load_env
 from .url_parser import parse_linkedin_url
-from .approval import render_approval_card
+from .approval import ApprovalDenied, render_approval_card, require_human_approval
 
 load_env()
 
@@ -57,6 +57,8 @@ __all__ = [
     "PixfaroClient",
     "PixfaroError",
     "render_approval_card",
+    "require_human_approval",
+    "ApprovalDenied",
     "active_backend",
     "image_backend",
     "manual_mode_message",

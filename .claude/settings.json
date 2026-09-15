@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)"
+    ],
+    "ask": [
+      "Edit(./lib/**)",
+      "Write(./lib/**)",
+      "Edit(./.claude/**)",
+      "Write(./.claude/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/Users/sumit/AppData/Local/Programs/Python/Python312/python.exe",
+            "args": [
+              "d:/personalGithub/myprojects/LinkedIn/.claude/hooks/guard_publish.py"
+            ],
+            "timeout": 10,
+            "statusMessage": "Checking LinkedIn approval guard"
+          }
+        ]
+      }
+    ]
+  }
+}
