@@ -27,6 +27,17 @@ Repository **Settings → Pages → Build and deployment → Deploy from a branc
 
 Edit `data.js`: change `week.start`, the `days`, and the post texts. Edits you make in the browser are saved in `localStorage` per week (keyed by `week.start`), so a new week starts clean.
 
+## Images
+
+Each post has an **Image** section:
+
+- **Paste a URL** of an image that's already online, or
+- **Upload your own** (or drag and drop a PNG, JPG, GIF, or WebP onto the section).
+
+Tick or untick **Attach image to this post** to post with or without it. The feed preview shows the image under the text.
+
+Your own images are stored in this browser (IndexedDB), so they survive a refresh but not a different browser. Scheduling tools such as Publora need a **hosted link**, so before scheduling a post with your own image, upload it somewhere public and paste that link in.
+
 ## Privacy
 
 Everything stays in your browser. Nothing is sent anywhere, and no API keys are used.

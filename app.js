@@ -31,6 +31,53 @@
     const has = !!imageOf(p);
     return s && s.attach != null ? s.attach && has : has;
   }
+  // Your own images live in IndexedDB (localStorage is too small for them).
+  const localUrls = {};
+  const isLocal = (img) => img.startsWith("local:");
+  const srcOf = (p) => {
+    const img = imageOf(p);
+    return isLocal(img) ? localUrls[p.id] || "" : img;
+  };
+  function idb(mode, fn) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open("linkedin-week-images", 1);
+      open.onupgradeneeded = () => open.result.createObjectStore("images");
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const tx = open.result.transaction("images", mode);
+        const req = fn(tx.objectStore("images"));
+        tx.oncomplete = () => resolve(req && req.result);
+        tx.onerror = () => reject(tx.error);
+      };
+    });
+  }
+  const imgKey = (id) => KEY + ":" + id;
+  const saveImage = (id, blob) => idb("readwrite", (s) => s.put(blob, imgKey(id)));
+  const loadImage = (id) => idb("readonly", (s) => s.get(imgKey(id)));
+  function dropLocal(id) {
+    if (localUrls[id]) {
+      URL.revokeObjectURL(localUrls[id]);
+      delete localUrls[id];
+    }
+    idb("readwrite", (s) => s.delete(imgKey(id))).catch(() => {});
+  }
+  function useOwnImage(d, file) {
+    if (!d || d.kind !== "post" || !file) return;
+    if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) {
+      $("imgMsg").textContent = "Pick a PNG, JPG, GIF, or WebP image.";
+      return;
+    }
+    if (localUrls[d.id]) URL.revokeObjectURL(localUrls[d.id]);
+    localUrls[d.id] = URL.createObjectURL(file);
+    setPost(d.id, { image: "local:" + file.name, imageSize: file.size, attach: true });
+    saveImage(d.id, file).catch(() => {
+      $("imgMsg").textContent = "Couldn't save the image in this browser, so it will be gone after a refresh.";
+    });
+    $("imgUrl").value = "";
+    updateAnalysis(d);
+    renderWeek();
+  }
+
   function setPost(id, patch) {
     state.posts[id] = Object.assign({}, state.posts[id], patch);
     save();
@@ -168,7 +215,9 @@
       "<h3>Image</h3>" +
       '<label class="attach"><input type="checkbox" id="attachImg"> <span>Attach image to this post</span></label>' +
       '<div class="img-row">' +
-      '<input type="url" id="imgUrl" placeholder="Paste an image URL (https://…)" aria-label="Image URL">' +
+      '<input type="url" id="imgUrl" placeholder="Paste an image URL, or upload / drop your own" aria-label="Image URL">' +
+      '<label class="btn ghost file-btn">Upload your own' +
+      '<input type="file" id="imgFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden></label>' +
       '<button class="btn ghost" data-act="clear-img">Remove image</button>' +
       "</div>" +
       '<img id="imgThumb" class="thumb" alt="Image preview" hidden>' +
@@ -185,7 +234,7 @@
       commentsBlock(d);
 
     $("postText").value = textOf(d);
-    $("imgUrl").value = imageOf(d);
+    $("imgUrl").value = isLocal(imageOf(d)) ? "" : imageOf(d);
     $("imgThumb").addEventListener("error", () => {
       $("imgMsg").textContent = "Couldn't load this image. Check the URL.";
     });
@@ -200,25 +249,37 @@
     const img = imageOf(d);
     const attach = attachOf(d);
     const checks = a.checks.slice();
-    if (attach) checks.push({ level: "ok", msg: "Image attached" });
-    else if (/image/i.test(d.format || "")) checks.push({ level: "warn", msg: "Planned with an image, but none is attached" });
+    const src = srcOf(d);
+    const local = isLocal(img);
+    const size = (state.posts[d.id] && state.posts[d.id].imageSize) || 0;
+    if (attach) checks.push({ level: "ok", msg: local ? "Your own image attached" : "Image attached" });
+    if (attach && local) checks.push({ level: "warn", msg: "Your own image needs a hosted link before it can be scheduled (see README)" });
+    if (attach && local && size > 5 * 1024 * 1024) checks.push({ level: "warn", msg: "Image is over 5 MB; LinkedIn may reject it" });
+    if (!attach && /image/i.test(d.format || "")) checks.push({ level: "warn", msg: "Planned with an image, but none is attached" });
     $("checks").innerHTML = checks.map((c) => '<li class="' + c.level + '">' + esc(c.msg) + "</li>").join("");
 
     const box = $("attachImg");
     box.checked = attach;
     box.disabled = !img;
     const thumb = $("imgThumb");
-    if (img) {
-      if (thumb.getAttribute("src") !== img) {
-        thumb.src = img;
+    if (img && src) {
+      if (thumb.getAttribute("src") !== src) {
+        thumb.src = src;
         $("imgMsg").textContent = "";
       }
       thumb.hidden = false;
       thumb.classList.toggle("dim", !attach);
+      if (local) {
+        $("imgMsg").textContent = "Your image: " + img.slice(6) +
+          (size ? " (" + (size / 1024 / 1024).toFixed(1) + " MB)" : "") + ". Saved in this browser only.";
+      }
+    } else if (img) {
+      thumb.hidden = true;
+      $("imgMsg").textContent = "Loading your image…";
     } else {
       thumb.hidden = true;
       thumb.removeAttribute("src");
-      $("imgMsg").textContent = "No image yet. Paste a hosted image URL to attach one.";
+      $("imgMsg").textContent = "No image yet. Paste an image URL, or upload or drop your own.";
     }
 
     const t = text.trim();
@@ -228,7 +289,7 @@
       '<div class="author"><div class="avatar">You</div><div><strong>You</strong><div class="muted" style="font-size:12px">' +
       esc(dayLabel(d.date)) + " · " + esc(d.time) + "</div></div></div>" +
       renderText(shown) + (cut ? ' <span class="more" data-act="more">…see more</span>' : "") +
-      (attach ? '<img class="post-img" src="' + esc(img) + '" alt="Post image">' : "");
+      (attach && src ? '<img class="post-img" src="' + esc(src) + '" alt="Post image">' : "");
   }
 
   // ---------- side panels ----------
@@ -319,12 +380,14 @@
       }
       case "reset":
         if (confirm("Replace your edits with the original draft?")) {
-          setPost(d.id, { text: null, image: null, attach: null });
+          if (isLocal(imageOf(d))) dropLocal(d.id);
+          setPost(d.id, { text: null, image: null, attach: null, imageSize: null });
           renderAll();
         }
         break;
       case "clear-img":
-        setPost(d.id, { image: "", attach: false });
+        if (isLocal(imageOf(d))) dropLocal(d.id);
+        setPost(d.id, { image: "", attach: false, imageSize: null });
         $("imgUrl").value = "";
         updateAnalysis(d);
         renderWeek();
@@ -344,7 +407,8 @@
       renderSide();
     } else if (e.target.id === "imgUrl") {
       const d = find(state.selected);
-      setPost(d.id, { image: e.target.value.trim() });
+      if (isLocal(imageOf(d))) dropLocal(d.id);
+      setPost(d.id, { image: e.target.value.trim(), imageSize: null });
       updateAnalysis(d);
       renderWeek();
     }
@@ -354,6 +418,9 @@
     if (e.target.dataset.check != null) {
       state.checklist[e.target.dataset.check] = e.target.checked;
       save();
+    } else if (e.target.id === "imgFile") {
+      if (e.target.files[0]) useOwnImage(find(state.selected), e.target.files[0]);
+      e.target.value = "";
     } else if (e.target.id === "attachImg") {
       const d = find(state.selected);
       setPost(d.id, { attach: e.target.checked });
@@ -362,12 +429,23 @@
     }
   });
 
+  // Drop an image file anywhere on the Image section.
+  document.addEventListener("dragover", (e) => {
+    if (e.target.closest && e.target.closest(".image-box")) e.preventDefault();
+  });
+  document.addEventListener("drop", (e) => {
+    if (!(e.target.closest && e.target.closest(".image-box"))) return;
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (f) useOwnImage(find(state.selected), f);
+  });
+
   $("exportBtn").addEventListener("click", () => {
     const out = {
       week: PLAN.week,
       posts: items().filter((d) => d.kind === "post").map((p) => ({
         id: p.id, date: p.date, time: p.time, formula: p.formula, goal: p.goal,
-        status: statusOf(p), text: textOf(p).trim(), image: attachOf(p) ? imageOf(p) : null,
+        status: statusOf(p), text: textOf(p).trim(), image: !attachOf(p) ? null : isLocal(imageOf(p)) ? "your own file: " + imageOf(p).slice(6) : imageOf(p),
       })),
       comments: state.comments,
       checklist: PLAN.checklist.map((c, i) => ({ text: c.text, done: checkedOf(i) })),
@@ -382,6 +460,7 @@
 
   $("resetAllBtn").addEventListener("click", () => {
     if (!confirm("Clear all edits, statuses, and comment counts for this week?")) return;
+    items().forEach((p) => { if (isLocal(imageOf(p))) dropLocal(p.id); });
     try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
     state.posts = {}; state.comments = {}; state.checklist = {};
     renderAll();
@@ -397,4 +476,14 @@
     state.selected = (today || weekPosts()[0] || PLAN.days[0]).id;
   }
   renderAll();
+
+  // Bring back your own images saved in IndexedDB.
+  items().forEach((p) => {
+    if (!isLocal(imageOf(p))) return;
+    loadImage(p.id).then((blob) => {
+      if (!blob) return;
+      localUrls[p.id] = URL.createObjectURL(blob);
+      if (state.selected === p.id) updateAnalysis(p);
+    }).catch(() => {});
+  });
 })();
