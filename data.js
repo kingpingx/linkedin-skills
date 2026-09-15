@@ -80,7 +80,7 @@ Dec 2021. AngularJS long-term support ends. Anyone still on it now has a real de
 
 Jun 2022. Angular 14 brings standalone components. Not everything needs an NgModule anymore.
 
-May 2023. Angular 16 introduces Signals, and change detection starts getting simpler.
+May 2023. Angular 16 introduces Signals, making change detection simpler.
 
 Nov 2023. Angular 17 adds the new @if and @for control flow, deferrable views, and a new home at angular.dev.
 
@@ -88,13 +88,23 @@ Nov 2024. Angular 19 makes standalone the default.
 
 A new major version every 6 months, for 8 years straight.
 
-What died was the 2016 version of Angular, with NgModules everywhere and a learning curve that scared juniors off. What ships today reads a lot like the rest of modern TypeScript.
+What died was the 2016 version of Angular — NgModules everywhere, a steep learning curve, and an experience that scared plenty of juniors away.
 
-I've watched most of this timeline from inside one codebase. The video analytics platform I work on went from Angular 12 to 18 one upgrade at a time, along with the charting library I built for it and the shared component libraries we publish to npm.
+What ships today looks a lot more like the rest of modern TypeScript.
 
-Now the same "it's over" talk is about developers and AI.
+I've watched most of this timeline from inside one codebase.
 
-I don't think we need to fear it. The real risk is using it just to get answers. Used well, it can help us learn faster.
+The video analytics platform I work on went from Angular 12 to 18 one upgrade at a time, along with the charting library I built for it and the shared component libraries we publish to npm.
+
+And that made me think about the latest version of the same prediction:
+
+“Developers are dead because of AI.”
+
+I don't think we need to fear it.
+
+The real risk is using AI just to get answers.
+
+Used well, it can help us learn faster.
 
 A few habits that help:
 
@@ -104,9 +114,13 @@ A few habits that help:
 
 → Try the next change yourself first, then ask AI to review it.
 
-It's the same idea as upgrading a framework one version at a time. Each small step teaches you something the next one builds on. If AI takes you straight to the answer every time, you skip those steps, and the gaps show up later.
+It's the same idea as upgrading a framework one version at a time.
 
-What's the most confident "X is dead" prediction you've seen in tech?
+Each small step teaches you something the next one builds on.
+
+If AI takes you straight to the answer every time, you skip those steps — and the gaps show up later.
+
+What's the most confident “X is dead” prediction you've seen in tech?
 
 #Angular #AI`,
     },
