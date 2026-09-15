@@ -161,6 +161,11 @@
     failed: "Publishing failed",
     unknown: "On Publora",
   };
+  // Publora status -> the planner's own status label.
+  const LABEL_FROM_PUBLORA = {
+    scheduled: "scheduled", pending: "scheduled", processing: "scheduled",
+    published: "posted", partially_published: "posted",
+  };
   const recordOf = (d) => published[fileKey(d.id)] || (d.publoraId ? { postGroupId: d.publoraId, status: "unknown" } : null);
   function fmtWhen(isoStr) {
     const t = new Date(isoStr);
@@ -576,7 +581,7 @@
       const rec = await api("GET", "status/" + encodeURIComponent(fileKey(d.id)) + q);
       if (rec.status === "none") delete published[fileKey(d.id)];
       else published[fileKey(d.id)] = rec;
-      const label = { scheduled: "scheduled", pending: "scheduled", processing: "scheduled", published: "posted", partially_published: "posted" }[rec.status];
+      const label = LABEL_FROM_PUBLORA[rec.status];
       if (label) setPost(d.id, { status: label });
       delete busy[d.id];
     } catch (err) {
@@ -1026,7 +1031,15 @@
       Object.assign(publora, p, { reason: p.reason || publora.reason });
       return api("GET", "published");
     })
-    .then((p) => { published = p || {}; })
+    .then((p) => {
+      published = p || {};
+      // Labels in the week strip and Earlier posts follow what Publora last said.
+      items().forEach((d) => {
+        const rec = published[fileKey(d.id)];
+        const label = rec && LABEL_FROM_PUBLORA[rec.status];
+        if (label && statusOf(d) !== label) setPost(d.id, { status: label });
+      });
+    })
     .catch(() => { /* opened without serve.py: buttons stay off */ })
     .then(() => {
       const d = find(state.selected);
@@ -1037,6 +1050,7 @@
         renderDetail(); // show the Publora buttons on saved links
       }
       renderWeek();
+      renderSide();
     });
 
   // Follow the Back button, bookmarks, and hand-edited links.
