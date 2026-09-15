@@ -4,8 +4,9 @@
 - Saves your own post images as base64 in images.json, one per post. A new
   upload replaces the old image for that post; removing the image deletes it.
 - Schedules or posts to LinkedIn through Publora, using PUBLORA_API_KEY and
-  LINKEDIN_PLATFORM_ID from the linkedin-skills folder's .env. Every send or
-  cancel pops a Yes/No approval box on your desktop first.
+  LINKEDIN_PLATFORM_ID from the linkedin-skills folder's .env. Schedule and
+  Post now are confirmed in the page; cancelling, and liking, commenting,
+  replying, or reposting, pop a Yes/No approval box on your desktop first.
 
 Usage: python serve.py [port]   (default 8080)
 Set LINKEDIN_SKILLS_DIR if the linkedin-skills folder isn't ../LinkedIn.
@@ -118,23 +119,6 @@ def publora(method, path, body=None):
     return data
 
 
-def approval_details(text, when_iso, own, url):
-    """Keep the approval box short. With the whole post in it, the box grows
-    taller than the screen and hides its Yes/No buttons. You review the full
-    text in the planner; the box shows enough to recognise the post."""
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    body = [line for line in lines if not re.fullmatch(r"(#\w+\s*)+", line)] or lines
-    clip = lambda s: s if len(s) <= 90 else s[:87] + "..."  # noqa: E731
-    return {
-        "Account": PUB["pid"],
-        "Goes out": local_time(when_iso),
-        "Image": (own["name"] + " (your own image)") if own else (url or "none"),
-        "Text": f"{len(text):,} characters, {len(lines)} lines",
-        "Starts": "“" + clip(body[0]) + "”" if body else None,
-        "Ends": "“" + clip(body[-1]) + "”" if len(body) > 1 else None,
-    }
-
-
 def publish(key, body):
     text = (body.get("text") or "").strip()
     if not text:
@@ -173,14 +157,8 @@ def publish(key, body):
     if existing and existing.get("status") in LIVE:
         return 409, {"error": "This post is already on Publora (" + existing["status"] + "). Cancel it first to send it again."}
 
-    try:
-        PUB["approve"](
-            action="Post to LinkedIn now" if body.get("now") else "Schedule a LinkedIn post",
-            details=approval_details(text, when_iso, own, url),
-        )
-    except PUB["Denied"]:
-        return 403, {"error": "Not approved. Nothing was sent to Publora."}
-
+    # No desktop Yes box for scheduling from the planner (your choice): the
+    # page asks you to confirm before it calls this.
     group_id = None
     try:
         if own:

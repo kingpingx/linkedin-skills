@@ -561,7 +561,13 @@
         image = { kind: "url", url: imageOf(d) };
       }
     }
-    busy[d.id] = "Waiting for you to click Yes in the approval box on your desktop (check the taskbar if you don't see it)…";
+    const firstLine = (text.split("\n").find((l) => l.trim()) || "").trim();
+    const question = (now ? "Post this to LinkedIn right now?" : "Schedule this post for " + fmtWhen(scheduledTime) + "?") +
+      "\n\n" + text.length.toLocaleString() + " characters, " +
+      (image ? (image.kind === "own" ? "with your own image" : "with the linked image") : "no image") +
+      ".\nStarts: " + (firstLine.length > 80 ? firstLine.slice(0, 77) + "..." : firstLine);
+    if (!confirm(question)) return;
+    busy[d.id] = "Sending to Publora…";
     renderPublish(d);
     try {
       published[fileKey(d.id)] = await api("POST", "publish/" + encodeURIComponent(fileKey(d.id)), { text, now, scheduledTime, image });
@@ -871,7 +877,7 @@
         sendPost(d, false);
         break;
       case "pub-now":
-        if (confirm("Post this to LinkedIn right now?")) sendPost(d, true);
+        sendPost(d, true);
         break;
       case "pub-check":
         checkStatus(d, false);
