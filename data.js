@@ -209,6 +209,7 @@ What have you looked up more than 20 times?
       image: "https://api.pixfaro.com/i/usr_5b55380581e3b0a16b1e/img_4b8cfd754ca1c5a49119.png",
       goal: "Comments",
       status: "scheduled",
+      publoraId: "6aa2e9925adfc83da2ad94c9",
       angle: "AI refactor of a legacy loop into many functions",
       text: `The cleanest-looking code I reviewed recently was also the hardest to follow.
 

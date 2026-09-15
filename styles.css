@@ -260,6 +260,25 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
 }
 .prev-item:hover { border-color: var(--accent); }
 
+/* Publora panel */
+.publish-box {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 4px 0 14px;
+}
+.publish-box h3 { margin-bottom: 6px; }
+.publish-box .row { margin-top: 10px; }
+.pub-status { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 0.92rem; }
+.pub-status span { color: var(--muted); }
+.pub-none strong { color: var(--muted); }
+.pub-scheduled strong, .pub-pending strong, .pub-processing strong { color: var(--accent); }
+.pub-published strong, .pub-partially_published strong { color: var(--ok); }
+.pub-draft strong { color: var(--warn); }
+.pub-failed strong, .pub-status .pub-err { color: var(--bad); }
+.pub-msg { margin: 10px 0 0; font-size: 0.88rem; color: var(--warn); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Day tabs: post, comment, like, reply, repost */
 .tabs {
   display: flex;

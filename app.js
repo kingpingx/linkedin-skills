@@ -132,6 +132,41 @@
   }
   const pct = (a, b) => (b ? Math.min(100, Math.round((a / b) * 100)) : 0);
 
+  // Calls to serve.py. The custom header is what lets serve.py tell the planner
+  // apart from any other website trying to reach it.
+  function api(method, path, body) {
+    return fetch("api/" + path, {
+      method,
+      headers: Object.assign({ "X-Planner": "1" }, body ? { "Content-Type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+      return data;
+    });
+  }
+
+  // ---------- Publora (real scheduling, through serve.py) ----------
+  const publora = { enabled: false, reason: "To schedule from here, open the planner through python serve.py.", account: "" };
+  let published = {}; // fileKey -> { postGroupId, status, scheduledTime, error }
+  const busy = {};    // post id -> message shown while a request runs or after it fails
+  const PUB_LABEL = {
+    draft: "Draft on Publora (not scheduled)",
+    scheduled: "Scheduled on Publora",
+    pending: "Publishing soon",
+    processing: "Publishing now",
+    published: "Published on LinkedIn",
+    partially_published: "Partly published",
+    failed: "Publishing failed",
+    unknown: "On Publora",
+  };
+  const recordOf = (d) => published[fileKey(d.id)] || (d.publoraId ? { postGroupId: d.publoraId, status: "unknown" } : null);
+  function fmtWhen(isoStr) {
+    const t = new Date(isoStr);
+    return isNaN(t) ? "" : t.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+
   // ---------- your own images (IndexedDB; localStorage is too small) ----------
   const localUrls = {};
   const isLocal = (img) => img.startsWith("local:");
@@ -174,19 +209,15 @@
   }
   async function saveImage(id, file) {
     if (!fileStore) return idb("readwrite", (s) => s.put(file, imgKey(id)));
-    const res = await fetch("api/images/" + encodeURIComponent(fileKey(id)), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: file.name, type: file.type, size: file.size, data: await toBase64(file) }),
-    });
-    if (!res.ok) throw new Error("save failed: " + res.status);
+    await api("PUT", "images/" + encodeURIComponent(fileKey(id)),
+      { name: file.name, type: file.type, size: file.size, data: await toBase64(file) });
   }
   function dropLocal(id) {
     if (localUrls[id]) {
       URL.revokeObjectURL(localUrls[id]);
       delete localUrls[id];
     }
-    if (fileStore) fetch("api/images/" + encodeURIComponent(fileKey(id)), { method: "DELETE" }).catch(() => {});
+    if (fileStore) api("DELETE", "images/" + encodeURIComponent(fileKey(id))).catch(() => {});
     idb("readwrite", (s) => s.delete(imgKey(id))).catch(() => {});
   }
   function useOwnImage(d, file) {
@@ -364,7 +395,8 @@
 
   function postEditorHTML(d) {
     const st = statusOf(d);
-    return '<div class="editor-grid">' +
+    return '<div class="publish-box" id="publishBox"></div>' +
+      '<div class="editor-grid">' +
       "<div>" +
       '<div class="label-row"><label for="postText">Post text</label><span id="charCount"></span></div>' +
       '<textarea id="postText" spellcheck="true" placeholder="Write your post here…"></textarea>' +
@@ -403,6 +435,8 @@
       $("imgMsg").textContent = "Couldn't load this image. Check the URL.";
     });
     updateAnalysis(d);
+    renderPublish(d);
+    if (recordOf(d)) checkStatus(d, true);
   }
 
   let expanded = false;
@@ -462,6 +496,110 @@
       (attach && src ? '<img class="post-img" src="' + esc(src) + '" alt="Post image">' : "");
   }
 
+  // ---------- Publora panel ----------
+  function renderPublish(d) {
+    const box = $("publishBox");
+    if (!box) return;
+    const rec = recordOf(d);
+    const off = publora.enabled ? "" : " disabled";
+    let html;
+    if (rec) {
+      const st = rec.status || "unknown";
+      html = '<div class="pub-status pub-' + st + '"><strong>' + esc(PUB_LABEL[st] || st) + "</strong>" +
+        (rec.scheduledTime ? "<span>" + (st === "published" ? "Went out " : "Goes out ") + esc(fmtWhen(rec.scheduledTime)) + "</span>" : "") +
+        (rec.error ? '<span class="pub-err">' + esc(rec.error) + "</span>" : "") +
+        "</div>" +
+        '<div class="row"><button class="btn ghost" data-act="pub-check"' + off + ">Check status on Publora</button>" +
+        (["draft", "scheduled", "pending"].includes(st) ? '<button class="btn ghost" data-act="pub-cancel"' + off + ">Cancel on Publora</button>" : "") +
+        "</div>";
+    } else {
+      html = '<div class="pub-status pub-none"><strong>Not on Publora yet</strong>' +
+        "<span>Nothing goes out until you press Schedule or Post now.</span></div>" +
+        (publora.enabled
+          ? '<div class="row"><label>Send at <input class="field" type="datetime-local" id="pubWhen" value="' +
+            esc(d.date + "T" + (timeOf(d) || "09:00")) + '"></label>' +
+            '<button class="btn" data-act="pub-schedule">Schedule</button>' +
+            '<button class="btn ghost" data-act="pub-now">Post now</button></div>'
+          : '<p class="muted small">' + esc(publora.reason) + "</p>");
+    }
+    if (busy[d.id]) html += '<p class="pub-msg">' + esc(busy[d.id]) + "</p>";
+    box.innerHTML = "<h3>Publora</h3>" + html;
+  }
+
+  function refreshAfterPublora(d) {
+    if (state.selected === d.id) {
+      renderPublish(d);
+      document.querySelectorAll("[data-status]").forEach((b) => b.classList.toggle("on", b.dataset.status === statusOf(d)));
+      renderTabs(d);
+    }
+    renderWeek();
+    renderSide();
+  }
+
+  async function sendPost(d, now) {
+    const text = textOf(d).trim();
+    if (!text) { busy[d.id] = "The post is empty."; return renderPublish(d); }
+    const left = (text.match(PLACEHOLDER) || []).length;
+    if (left && !confirm("This post still has " + left + " [placeholder]" + (left > 1 ? "s" : "") + ". Send it anyway?")) return;
+    let scheduledTime = null;
+    if (!now) {
+      const t = $("pubWhen") && $("pubWhen").value ? new Date($("pubWhen").value) : null; // your local time
+      if (!t || isNaN(t)) { busy[d.id] = "Pick a date and time."; return renderPublish(d); }
+      scheduledTime = t.toISOString();
+    }
+    let image = null;
+    if (attachOf(d)) {
+      if (isLocal(imageOf(d))) {
+        if (!fileStore) { busy[d.id] = "Your own image is only in this browser. Open the planner through python serve.py and upload it again."; return renderPublish(d); }
+        image = { kind: "own" };
+      } else {
+        image = { kind: "url", url: imageOf(d) };
+      }
+    }
+    busy[d.id] = "Waiting for you to click Yes in the approval box on your desktop (check the taskbar if you don't see it)…";
+    renderPublish(d);
+    try {
+      published[fileKey(d.id)] = await api("POST", "publish/" + encodeURIComponent(fileKey(d.id)), { text, now, scheduledTime, image });
+      setPost(d.id, { status: "scheduled" });
+      delete busy[d.id];
+    } catch (err) {
+      busy[d.id] = err.message;
+    }
+    refreshAfterPublora(d);
+  }
+
+  async function checkStatus(d, quiet) {
+    if (!recordOf(d) || !publora.enabled) return;
+    if (!quiet) { busy[d.id] = "Checking Publora…"; renderPublish(d); }
+    try {
+      const q = d.publoraId ? "?id=" + encodeURIComponent(d.publoraId) : "";
+      const rec = await api("GET", "status/" + encodeURIComponent(fileKey(d.id)) + q);
+      if (rec.status === "none") delete published[fileKey(d.id)];
+      else published[fileKey(d.id)] = rec;
+      const label = { scheduled: "scheduled", pending: "scheduled", processing: "scheduled", published: "posted", partially_published: "posted" }[rec.status];
+      if (label) setPost(d.id, { status: label });
+      delete busy[d.id];
+    } catch (err) {
+      busy[d.id] = "Couldn't check Publora: " + err.message;
+    }
+    refreshAfterPublora(d);
+  }
+
+  async function cancelPost(d) {
+    if (!confirm("Cancel this post on Publora? It won't go out.")) return;
+    busy[d.id] = "Waiting for you to click Yes in the approval box on your desktop…";
+    renderPublish(d);
+    try {
+      await api("POST", "cancel/" + encodeURIComponent(fileKey(d.id)));
+      delete published[fileKey(d.id)];
+      setPost(d.id, { status: "draft" });
+      delete busy[d.id];
+    } catch (err) {
+      busy[d.id] = err.message;
+    }
+    refreshAfterPublora(d);
+  }
+
   // ---------- comment / like / reply / repost tabs ----------
   function actTabHTML(d, key) {
     const a = ACT[key];
@@ -484,7 +622,12 @@
       : '<li class="empty-log muted">Nothing saved yet. Save posts you plan to ' + a.label.toLowerCase() +
         " on, then tick them off as you go.</li>";
 
-    return '<p class="note">' + esc(a.tip) + "</p>" + guide +
+    return '<p class="note">' + esc(a.tip) + "</p>" +
+      '<p class="muted small">This tab only keeps count of what you do yourself on LinkedIn. Nothing is ' +
+      esc(a.label.toLowerCase() === "like" ? "liked" : a.label.toLowerCase() + "ed") +
+      " from the planner. Save the posts you pick below, open them, act on LinkedIn, then tick them off." +
+      (key !== "like" ? " Want a draft? Paste the post link into Claude Code." : "") + "</p>" +
+      guide +
       '<div class="act-row">' +
       '<div class="counter">' +
       '<button data-act="dec" aria-label="One fewer">−</button>' +
@@ -657,6 +800,18 @@
         updateAnalysis(d);
         renderWeek();
         break;
+      case "pub-schedule":
+        sendPost(d, false);
+        break;
+      case "pub-now":
+        if (confirm("Post this to LinkedIn right now?")) sendPost(d, true);
+        break;
+      case "pub-check":
+        checkStatus(d, false);
+        break;
+      case "pub-cancel":
+        cancelPost(d);
+        break;
       case "more":
         expanded = true;
         updateAnalysis(d);
@@ -788,6 +943,23 @@
   }
   renderAll();
   syncHash();
+
+  // Is serve.py able to publish, and what's already on Publora?
+  api("GET", "publora")
+    .then((p) => {
+      Object.assign(publora, p, { reason: p.reason || publora.reason });
+      return api("GET", "published");
+    })
+    .then((p) => { published = p || {}; })
+    .catch(() => { /* opened without serve.py: buttons stay off */ })
+    .then(() => {
+      const d = find(state.selected);
+      if (d && $("publishBox")) {
+        renderPublish(d);
+        if (recordOf(d)) checkStatus(d, true);
+      }
+      renderWeek();
+    });
 
   // Follow the Back button, bookmarks, and hand-edited links.
   window.addEventListener("hashchange", () => {

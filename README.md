@@ -28,6 +28,17 @@ Repository **Settings → Pages → Build and deployment → Deploy from a branc
 
 Edit `data.js`: change `week.start`, the `days`, and the post texts. Edits you make in the browser are saved in `localStorage` per week (keyed by `week.start`), so a new week starts clean.
 
+## Schedule or post from the planner
+
+With `python serve.py` running, every post has a **Publora** panel at the top of its editor:
+
+- **Not on Publora yet**: pick a time and press **Schedule**, or **Post now**.
+- Once sent it shows the real status from Publora (scheduled, published, failed), with **Check status** and **Cancel on Publora**.
+
+`serve.py` sends the post using `PUBLORA_API_KEY` and `LINKEDIN_PLATFORM_ID` from the linkedin-skills folder's `.env` (it looks in `../LinkedIn`; set `LINKEDIN_SKILLS_DIR` to change that), so your key never reaches the browser. Every send or cancel pops a **Yes/No approval box** on your desktop first; nothing goes out without a Yes. A post with your own image goes through Publora's upload flow (draft, upload the image, then schedule). What was sent is recorded in `published.json` (git-ignored).
+
+The Comment, Like, Reply, and Repost tabs only track what you do yourself on LinkedIn; they don't act on anything.
+
 ## Images
 
 Each post has an **Image** section:
