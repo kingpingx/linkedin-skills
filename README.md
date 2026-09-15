@@ -13,10 +13,10 @@ No build step and no dependencies: plain HTML, CSS, and JavaScript.
 
 ## Run it
 
-Open `index.html` in a browser, or serve the folder:
+Open `index.html` in a browser, or run the local server (caching off, so edits show on a normal refresh):
 
 ```bash
-npx serve .
+python serve.py        # http://127.0.0.1:8080
 ```
 
 ## Host it on GitHub Pages
