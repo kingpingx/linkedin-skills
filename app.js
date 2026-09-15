@@ -25,6 +25,12 @@
 
   const textOf = (p) => (state.posts[p.id] && state.posts[p.id].text != null ? state.posts[p.id].text : p.text);
   const statusOf = (p) => (state.posts[p.id] && state.posts[p.id].status) || p.status || "draft";
+  const imageOf = (p) => (state.posts[p.id] && state.posts[p.id].image != null ? state.posts[p.id].image : p.image || "");
+  function attachOf(p) {
+    const s = state.posts[p.id];
+    const has = !!imageOf(p);
+    return s && s.attach != null ? s.attach && has : has;
+  }
   function setPost(id, patch) {
     state.posts[id] = Object.assign({}, state.posts[id], patch);
     save();
@@ -97,7 +103,7 @@
       let badge = "";
       if (d.kind === "post") {
         const st = statusOf(d);
-        sub = d.time + " · " + d.goal;
+        sub = d.time + " · " + d.goal + (attachOf(d) ? " · 🖼" : "");
         badge = '<span class="status s-' + st + '">' + st + "</span>";
       } else if (d.kind === "comment") {
         sub = "Commenting";
@@ -158,6 +164,16 @@
       '<div class="preview" id="preview"></div>' +
       "</div>" +
       "</div>" +
+      '<div class="image-box">' +
+      "<h3>Image</h3>" +
+      '<label class="attach"><input type="checkbox" id="attachImg"> <span>Attach image to this post</span></label>' +
+      '<div class="img-row">' +
+      '<input type="url" id="imgUrl" placeholder="Paste an image URL (https://…)" aria-label="Image URL">' +
+      '<button class="btn ghost" data-act="clear-img">Remove image</button>' +
+      "</div>" +
+      '<img id="imgThumb" class="thumb" alt="Image preview" hidden>' +
+      '<p class="muted small" id="imgMsg"></p>' +
+      "</div>" +
       '<ul class="checks" id="checks"></ul>' +
       '<div class="row">' +
       '<div class="seg" role="group" aria-label="Status">' +
@@ -169,6 +185,10 @@
       commentsBlock(d);
 
     $("postText").value = textOf(d);
+    $("imgUrl").value = imageOf(d);
+    $("imgThumb").addEventListener("error", () => {
+      $("imgMsg").textContent = "Couldn't load this image. Check the URL.";
+    });
     updateAnalysis(d);
   }
 
@@ -177,7 +197,29 @@
     const text = textOf(d);
     const a = analyze(text);
     $("charCount").textContent = a.chars.toLocaleString() + " / " + LIMIT.toLocaleString();
-    $("checks").innerHTML = a.checks.map((c) => '<li class="' + c.level + '">' + esc(c.msg) + "</li>").join("");
+    const img = imageOf(d);
+    const attach = attachOf(d);
+    const checks = a.checks.slice();
+    if (attach) checks.push({ level: "ok", msg: "Image attached" });
+    else if (/image/i.test(d.format || "")) checks.push({ level: "warn", msg: "Planned with an image, but none is attached" });
+    $("checks").innerHTML = checks.map((c) => '<li class="' + c.level + '">' + esc(c.msg) + "</li>").join("");
+
+    const box = $("attachImg");
+    box.checked = attach;
+    box.disabled = !img;
+    const thumb = $("imgThumb");
+    if (img) {
+      if (thumb.getAttribute("src") !== img) {
+        thumb.src = img;
+        $("imgMsg").textContent = "";
+      }
+      thumb.hidden = false;
+      thumb.classList.toggle("dim", !attach);
+    } else {
+      thumb.hidden = true;
+      thumb.removeAttribute("src");
+      $("imgMsg").textContent = "No image yet. Paste a hosted image URL to attach one.";
+    }
 
     const t = text.trim();
     const cut = !expanded && t.length > FOLD;
@@ -185,7 +227,8 @@
     $("preview").innerHTML =
       '<div class="author"><div class="avatar">You</div><div><strong>You</strong><div class="muted" style="font-size:12px">' +
       esc(dayLabel(d.date)) + " · " + esc(d.time) + "</div></div></div>" +
-      renderText(shown) + (cut ? ' <span class="more" data-act="more">…see more</span>' : "");
+      renderText(shown) + (cut ? ' <span class="more" data-act="more">…see more</span>' : "") +
+      (attach ? '<img class="post-img" src="' + esc(img) + '" alt="Post image">' : "");
   }
 
   // ---------- side panels ----------
@@ -276,9 +319,15 @@
       }
       case "reset":
         if (confirm("Replace your edits with the original draft?")) {
-          setPost(d.id, { text: null });
+          setPost(d.id, { text: null, image: null, attach: null });
           renderAll();
         }
+        break;
+      case "clear-img":
+        setPost(d.id, { image: "", attach: false });
+        $("imgUrl").value = "";
+        updateAnalysis(d);
+        renderWeek();
         break;
       case "more":
         expanded = true;
@@ -293,6 +342,11 @@
       setPost(d.id, { text: e.target.value });
       updateAnalysis(d);
       renderSide();
+    } else if (e.target.id === "imgUrl") {
+      const d = find(state.selected);
+      setPost(d.id, { image: e.target.value.trim() });
+      updateAnalysis(d);
+      renderWeek();
     }
   });
 
@@ -300,6 +354,11 @@
     if (e.target.dataset.check != null) {
       state.checklist[e.target.dataset.check] = e.target.checked;
       save();
+    } else if (e.target.id === "attachImg") {
+      const d = find(state.selected);
+      setPost(d.id, { attach: e.target.checked });
+      updateAnalysis(d);
+      renderWeek();
     }
   });
 
@@ -308,7 +367,7 @@
       week: PLAN.week,
       posts: items().filter((d) => d.kind === "post").map((p) => ({
         id: p.id, date: p.date, time: p.time, formula: p.formula, goal: p.goal,
-        status: statusOf(p), text: textOf(p).trim(),
+        status: statusOf(p), text: textOf(p).trim(), image: attachOf(p) ? imageOf(p) : null,
       })),
       comments: state.comments,
       checklist: PLAN.checklist.map((c, i) => ({ text: c.text, done: checkedOf(i) })),

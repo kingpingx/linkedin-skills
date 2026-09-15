@@ -64,8 +64,9 @@ What analogy finally made async click for you?
       kind: "post",
       time: "09:30",
       pillar: "Opinion with facts",
-      format: "Text",
+      format: "Text + image",
       formula: "F10 Contrarian + Receipts",
+      image: "https://api.pixfaro.com/i/usr_5b55380581e3b0a16b1e/img_9db8ffed17a87a569128.png",
       goal: "Comments",
       angle: "\"Angular is dead\" since 2016, against what actually shipped",
       commentTarget: 10,
@@ -89,11 +90,17 @@ A new major version every 6 months, for 8 years straight.
 
 What died was the 2016 version of Angular, with NgModules everywhere and a learning curve that scared juniors off. What ships today reads a lot like the rest of modern TypeScript.
 
-[Your real detail, e.g. "On our team we moved to standalone components and signals in ___, and ___ got noticeably easier."]
+I've watched most of this timeline from inside one codebase. The video analytics platform I work on went from Angular 12 to 18 one upgrade at a time, along with the charting library I built for it and the shared component libraries we publish to npm.
 
-What's the most confident "X is dead" prediction you've seen in frontend?
+Now the same "it's over" talk is about developers and AI.
 
-#Angular #TypeScript`,
+I don't think we need to fear it. We need to grow with it, the way you upgrade a framework: one version at a time.
+
+Learn a little, use it in real work, then take the next step. Each step teaches you something the next one builds on. Jump straight to the newest thing and you skip those steps, and the gaps show up later.
+
+What's the most confident "X is dead" prediction you've seen in tech?
+
+#Angular #AI`,
     },
     {
       id: "thu",
@@ -177,6 +184,7 @@ What have you looked up more than 20 times?
       pillar: "Personal",
       format: "Text + image",
       formula: "F17 Controlled A/B",
+      image: "https://api.pixfaro.com/i/usr_5b55380581e3b0a16b1e/img_4b8cfd754ca1c5a49119.png",
       goal: "Comments",
       status: "scheduled",
       angle: "AI refactor of a legacy loop into many functions",
