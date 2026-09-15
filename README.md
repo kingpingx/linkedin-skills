@@ -37,7 +37,16 @@ With `python serve.py` running, every post has a **Publora** panel at the top of
 
 `serve.py` sends the post using `PUBLORA_API_KEY` and `LINKEDIN_PLATFORM_ID` from the linkedin-skills folder's `.env` (it looks in `../LinkedIn`; set `LINKEDIN_SKILLS_DIR` to change that), so your key never reaches the browser. Every send or cancel pops a **Yes/No approval box** on your desktop first; nothing goes out without a Yes. A post with your own image goes through Publora's upload flow (draft, upload the image, then schedule). What was sent is recorded in `published.json` (git-ignored).
 
-The Comment, Like, Reply, and Repost tabs only track what you do yourself on LinkedIn; they don't act on anything.
+## Like, comment, reply, and repost
+
+In the Like, Comment, Reply, and Repost tabs, save the LinkedIn link of a post you want to engage with. Then either do it on LinkedIn yourself and tick it off, or, with `serve.py` running, use the button on the saved link:
+
+- **Like:** pick a reaction (Like, Celebrate, Support, Love, Insightful, Funny) and press **React via Publora**.
+- **Comment:** write your comment (up to 1,250 characters) and press **Post comment via Publora**.
+- **Reply:** save the comment's own link (… on the comment → Copy link to comment), write your reply, and press **Post reply via Publora**.
+- **Repost:** optionally write your thoughts on top and press **Repost via Publora**. The post is looked up through Apify first (needs `APIFY_TOKEN`), and posts whose author turned off reposting are refused.
+
+Each one pops the same Yes/No approval box first. Once sent, the item is ticked off and counts toward the day's target.
 
 ## Images
 

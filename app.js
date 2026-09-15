@@ -600,6 +600,61 @@
     refreshAfterPublora(d);
   }
 
+  // ---------- like / comment / reply / repost through Publora ----------
+  const REACTIONS = [["LIKE", "Like"], ["PRAISE", "Celebrate"], ["EMPATHY", "Support"],
+    ["APPRECIATION", "Love"], ["INTEREST", "Insightful"], ["ENTERTAINMENT", "Funny"]];
+  const SENT_LABEL = { like: "Reacted", comment: "Commented", reply: "Replied", repost: "Reposted" };
+  const engageBusy = {}; // "<day>:<tab>:<index>" -> message
+
+  function engageHTML(d, key, it, i) {
+    if (it.sent) return '<span class="sent">✓ ' + SENT_LABEL[key] + " via Publora · " + esc(fmtWhen(it.sent.at)) + "</span>";
+    if (!isHttp(it.url) || !publora.enabled) return "";
+    const b = engageBusy[d.id + ":" + key + ":" + i];
+    const msg = b ? '<p class="pub-msg">' + esc(b) + "</p>" : "";
+    if (key === "like") {
+      return '<div class="engage"><select class="field" data-react="' + i + '" aria-label="Reaction">' +
+        REACTIONS.map(([v, l]) => '<option value="' + v + '"' + ((it.reaction || "LIKE") === v ? " selected" : "") + ">" + l + "</option>").join("") +
+        '</select><button class="btn" data-engage="' + i + '">React via Publora</button></div>' + msg;
+    }
+    const ph = {
+      comment: "Your comment (up to 1,250 characters)",
+      reply: "Your reply (up to 1,250 characters)",
+      repost: "Your thoughts on top (optional)",
+    }[key];
+    const label = { comment: "Post comment", reply: "Post reply", repost: "Repost" }[key];
+    return '<div class="engage"><textarea class="field" rows="2" data-etext="' + i + '" placeholder="' + esc(ph) + '">' +
+      esc(it.text || "") + "</textarea>" +
+      '<button class="btn" data-engage="' + i + '">' + label + " via Publora</button></div>" + msg;
+  }
+
+  async function sendEngage(d, key, i) {
+    const it = logOf(d, key)[i];
+    if (!it) return;
+    const bkey = d.id + ":" + key + ":" + i;
+    if ((key === "comment" || key === "reply") && !(it.text || "").trim()) {
+      engageBusy[bkey] = "Write your " + key + " first.";
+      return renderDetail();
+    }
+    engageBusy[bkey] = (key === "repost" ? "Looking up the post, then waiting" : "Waiting") +
+      " for you to click Yes in the approval box on your desktop (check the taskbar if you don't see it)…";
+    renderDetail();
+    try {
+      const r = await api("POST", "engage", { kind: key, url: it.url, text: it.text || "", reaction: it.reaction || "LIKE" });
+      const list = logOf(d, key).slice();
+      const wasDone = list[i].done;
+      list[i] = Object.assign({}, list[i], { sent: { at: r.at }, done: true });
+      setLog(d, key, list);
+      if (!wasDone) setCount(d, key, countOf(d, key) + 1);
+      delete engageBusy[bkey];
+    } catch (err) {
+      engageBusy[bkey] = err.message;
+    }
+    if (state.selected === d.id && currentTab(d) === key) renderDetail();
+    renderTabs(d);
+    renderWeek();
+    renderSide();
+  }
+
   // ---------- comment / like / reply / repost tabs ----------
   function actTabHTML(d, key) {
     const a = ACT[key];
@@ -613,20 +668,21 @@
       ? log.map((it, i) =>
         '<li class="' + (it.done ? "done" : "") + '">' +
         '<input type="checkbox" data-log="' + i + '"' + (it.done ? " checked" : "") + ' aria-label="Done">' +
-        '<div class="log-body">' +
+        '<div class="log-body"><div class="log-main">' +
         (isHttp(it.url) ? '<a href="' + esc(it.url) + '" target="_blank" rel="noopener">' + esc(shortUrl(it.url)) + "</a>" : "") +
         (it.note ? "<span>" + esc(it.note) + "</span>" : "") +
-        "</div>" +
+        "</div>" + engageHTML(d, key, it, i) + "</div>" +
         '<button class="x" data-del="' + i + '" aria-label="Delete">×</button>' +
         "</li>").join("")
       : '<li class="empty-log muted">Nothing saved yet. Save posts you plan to ' + a.label.toLowerCase() +
         " on, then tick them off as you go.</li>";
 
     return '<p class="note">' + esc(a.tip) + "</p>" +
-      '<p class="muted small">This tab only keeps count of what you do yourself on LinkedIn. Nothing is ' +
-      esc(a.label.toLowerCase() === "like" ? "liked" : a.label.toLowerCase() + "ed") +
-      " from the planner. Save the posts you pick below, open them, act on LinkedIn, then tick them off." +
-      (key !== "like" ? " Want a draft? Paste the post link into Claude Code." : "") + "</p>" +
+      '<p class="muted small">Save the posts you pick below. Then either do it on LinkedIn yourself and tick it off, ' +
+      "or use the Publora button on a saved link to do it from here (the Yes box on your desktop comes first)." +
+      (key === "comment" || key === "reply" ? " Want a draft? Paste the link into Claude Code." : "") +
+      (key === "reply" ? " For replies, save the comment's own link (… on the comment → Copy link to comment)." : "") +
+      "</p>" +
       guide +
       '<div class="act-row">' +
       '<div class="counter">' +
@@ -750,6 +806,12 @@
       return;
     }
 
+    const eng = e.target.closest("[data-engage]");
+    if (eng) {
+      sendEngage(d, currentTab(d), Number(eng.dataset.engage));
+      return;
+    }
+
     const act = e.target.closest("[data-act]");
     if (!act) return;
     switch (act.dataset.act) {
@@ -836,6 +898,14 @@
   document.addEventListener("input", (e) => {
     const d = find(state.selected);
     if (!d) return;
+    if (e.target.dataset.etext != null) {
+      const key = currentTab(d);
+      const list = logOf(d, key).slice();
+      const i = Number(e.target.dataset.etext);
+      list[i] = Object.assign({}, list[i], { text: e.target.value });
+      setLog(d, key, list);
+      return;
+    }
     if (e.target.id === "postText") {
       setPost(d.id, { text: e.target.value });
       updateAnalysis(d);
@@ -872,6 +942,12 @@
       setCount(d, key, countOf(d, key) + (e.target.checked ? 1 : -1));
       renderDetail();
       refreshCounter(d, key);
+    } else if (e.target.dataset.react != null && d) {
+      const key = currentTab(d);
+      const list = logOf(d, key).slice();
+      const i = Number(e.target.dataset.react);
+      list[i] = Object.assign({}, list[i], { reaction: e.target.value });
+      setLog(d, key, list);
     } else if (e.target.id === "imgFile" && d) {
       if (e.target.files[0]) useOwnImage(d, e.target.files[0]);
       e.target.value = "";
@@ -957,6 +1033,8 @@
       if (d && $("publishBox")) {
         renderPublish(d);
         if (recordOf(d)) checkStatus(d, true);
+      } else if (d && isDay(d) && publora.enabled) {
+        renderDetail(); // show the Publora buttons on saved links
       }
       renderWeek();
     });

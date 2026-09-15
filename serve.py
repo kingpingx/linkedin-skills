@@ -47,6 +47,9 @@ def load_publora():
         sys.path.insert(0, SKILLS_DIR)
         from lib._env import load_env
         from lib.approval import ApprovalDenied, require_human_approval
+        from lib.backend_selector import repost
+        from lib.publora_client import PubloraClient, PubloraError
+        from lib.url_parser import parse_linkedin_url
         load_env()
     except Exception as e:  # noqa: BLE001 - any failure just turns publishing off
         return None, f"Publishing is off: couldn't load the linkedin-skills folder at {SKILLS_DIR} ({e})."
@@ -54,7 +57,9 @@ def load_publora():
     if not key or not pid:
         return None, "Publishing is off: set PUBLORA_API_KEY and LINKEDIN_PLATFORM_ID in the linkedin-skills .env."
     return {"requests": requests, "key": key, "pid": pid,
-            "approve": require_human_approval, "Denied": ApprovalDenied}, None
+            "approve": require_human_approval, "Denied": ApprovalDenied,
+            "client": PubloraClient, "PubloraError": PubloraError,
+            "parse": parse_linkedin_url, "repost": repost}, None
 
 
 PUB, PUB_REASON = load_publora()
@@ -257,6 +262,63 @@ def cancel(key):
     return 200, {"status": "none"}
 
 
+REACTIONS = {"LIKE", "PRAISE", "EMPATHY", "APPRECIATION", "INTEREST", "ENTERTAINMENT"}
+LINKEDIN_URL_RE = re.compile(r"^https://([a-z]+\.)?linkedin\.com/", re.I)
+
+
+def engage(body):
+    """Like, comment on, reply to, or repost someone else's post through Publora.
+
+    Everything is checked before the approval box; the linkedin-skills client
+    then pops the Yes/No box itself before anything is sent.
+    """
+    kind = body.get("kind")
+    url = str(body.get("url") or "").strip()
+    text = str(body.get("text") or "").strip()
+    if kind not in ("like", "comment", "reply", "repost"):
+        return 400, {"error": "Unknown action."}
+    if not LINKEDIN_URL_RE.match(url):
+        return 400, {"error": "Save the post's LinkedIn link first."}
+    parsed = PUB["parse"](url)
+    if not parsed.get("post_urn"):
+        return 400, {"error": "Couldn't find the post in that link. Use LinkedIn's … → Copy link to post."}
+
+    reaction = str(body.get("reaction") or "LIKE").upper()
+    if kind == "like" and reaction not in REACTIONS:
+        return 400, {"error": "Unknown reaction."}
+    if kind in ("comment", "reply"):
+        if not text:
+            return 400, {"error": "Write your " + kind + " first."}
+        if len(text) > 1250:
+            return 400, {"error": "LinkedIn comments are limited to 1,250 characters."}
+        if kind == "reply" and not parsed.get("comment_urn"):
+            return 400, {"error": "For a reply, save the comment's own link (… on the comment → Copy link to comment)."}
+    if kind == "repost" and len(text) > 3000:
+        return 400, {"error": "Repost text is limited to 3,000 characters."}
+
+    try:
+        client = PUB["client"]()
+        if kind == "like":
+            target = parsed.get("comment_urn") or parsed["post_urn"]
+            client.create_reaction(post_urn=target, platform_id=PUB["pid"], reaction_type=reaction)
+        elif kind in ("comment", "reply"):
+            client.create_comment(post_urn=parsed["post_urn"], message=text, platform_id=PUB["pid"],
+                                  parent_comment=parsed["comment_urn"] if kind == "reply" else None)
+        else:
+            res = PUB["repost"](url, commentary=text or None, platform_id=PUB["pid"])
+            if res is None:
+                return 502, {"error": "Couldn't look up the post to repost. It needs the Apify token, and the post must be public."}
+            if isinstance(res, dict) and res.get("mode") in ("error", "manual"):
+                return 400, {"error": res.get("message") or "This post can't be reposted from here."}
+    except PUB["Denied"]:
+        return 403, {"error": "Not approved. Nothing was sent."}
+    except PUB["PubloraError"] as e:
+        return 502, {"error": str(e)}
+    except Exception as e:  # noqa: BLE001 - show the reason in the planner
+        return 502, {"error": f"Something went wrong: {e}"}
+    return 200, {"ok": True, "kind": kind, "at": iso(now_utc())}
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
@@ -330,6 +392,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not key or body is None:
                 return self.send_json(400, {"error": "bad request"})
             return self.send_json(*publish(key, body))
+        if path == "/api/engage":
+            body = self.read_body(64 * 1024)
+            if body is None:
+                return self.send_json(400, {"error": "bad request"})
+            return self.send_json(*engage(body))
         if path.startswith("/api/cancel/"):
             key = self.key_after("/api/cancel/")
             if not key:
