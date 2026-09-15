@@ -18,8 +18,8 @@ window.PLAN = {
       how: "Answer their question with a real example from your work",
     },
     {
-      id: "tue",
-      date: "2026-09-15",
+      id: "thu",
+      date: "2026-09-17",
       kind: "post",
       time: "08:00",
       pillar: "Teaching",
@@ -125,8 +125,8 @@ What's the most confident “X is dead” prediction you've seen in tech?
 #Angular #AI`,
     },
     {
-      id: "thu",
-      date: "2026-09-17",
+      id: "sat",
+      date: "2026-09-19",
       kind: "post",
       time: "08:00",
       pillar: "Community",
@@ -192,7 +192,7 @@ What have you looked up more than 20 times?
 
 #softwareengineering #dotnet`,
     },
-    { id: "sat", date: "2026-09-19", kind: "off" },
+    { id: "tue", date: "2026-09-15", kind: "off" },
     { id: "sun", date: "2026-09-20", kind: "off" },
   ],
 

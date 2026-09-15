@@ -2,6 +2,7 @@
   "use strict";
 
   const PLAN = window.PLAN;
+  PLAN.days.sort((a, b) => a.date.localeCompare(b.date)); // days can be moved around in data.js
   const KEY = "linkedin-week:" + PLAN.week.start;
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
