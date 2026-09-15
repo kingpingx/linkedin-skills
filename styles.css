@@ -260,6 +260,74 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
 }
 .prev-item:hover { border-color: var(--accent); }
 
+/* Day tabs: post, comment, like, reply, repost */
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  margin: 12px 0 16px;
+  overflow-x: auto;
+}
+.tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--line);
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 2px;
+  text-transform: capitalize;
+}
+.tab.on .tab-badge { background: var(--accent-soft); color: var(--accent); }
+
+.field {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+}
+.empty { padding: 18px; border: 1px dashed var(--line); border-radius: 8px; }
+.empty .row { margin-top: 8px; }
+
+.act-row { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin: 14px 0 8px; }
+.target { display: inline-flex; gap: 8px; align-items: center; font-size: 0.88rem; color: var(--muted); }
+.target .field { width: 80px; }
+.log-title { margin-top: 18px; }
+.log-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.log-form .field { flex: 1 1 200px; min-width: 0; }
+.log { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+.log li {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 0.9rem;
+}
+.log li input { margin-top: 3px; }
+.log li.done .log-body { opacity: 0.55; text-decoration: line-through; }
+.log .empty-log { border-style: dashed; }
+.log-body { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.log-body a { color: var(--accent); }
+.x { border: 0; background: transparent; color: var(--muted); font-size: 1.2rem; line-height: 1; cursor: pointer; }
+.x:hover { color: var(--bad); }
+
+.minis { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 6px; }
+.mini { font-size: 0.72rem; color: var(--muted); }
+.mini.done { color: var(--ok); font-weight: 600; }
+.day.quiet { opacity: 0.6; }
+
 @media (max-width: 1000px) {
   .editor-grid { grid-template-columns: 1fr; }
   textarea { min-height: 320px; }

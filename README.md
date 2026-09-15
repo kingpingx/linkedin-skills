@@ -2,10 +2,11 @@
 
 A small static web app for planning and tracking a week of LinkedIn posts.
 
-- **Week view** with each day's post time, goal, and status (draft, ready, scheduled, posted)
+- **Week view** with each day's post status and progress on every activity
+- **Tabs for each day**: ✍️ Post, 💬 Comment, 👍 Like, ↩️ Reply, 🔁 Repost. Do any mix on any day, even all of them, and add a post to a day that had none
+- **Activity tracking**: a daily target, a +/− counter, and a list of saved links and notes you tick off as you go (ticking counts it)
 - **Editor + feed preview** showing where LinkedIn's "…see more" cut lands
 - **Built-in checks**: unfilled `[placeholders]`, length (900–1,300 sweet spot, 3,000 limit), question opener, closing question, em dashes, hashtag count, links in the body
-- **Comment tracker**: daily target and who to comment on
 - **Weekly checklist** and progress
 - **Export JSON** of the week's final texts and statuses
 
