@@ -113,6 +113,23 @@ def publora(method, path, body=None):
     return data
 
 
+def approval_details(text, when_iso, own, url):
+    """Keep the approval box short. With the whole post in it, the box grows
+    taller than the screen and hides its Yes/No buttons. You review the full
+    text in the planner; the box shows enough to recognise the post."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    body = [line for line in lines if not re.fullmatch(r"(#\w+\s*)+", line)] or lines
+    clip = lambda s: s if len(s) <= 90 else s[:87] + "..."  # noqa: E731
+    return {
+        "Account": PUB["pid"],
+        "Goes out": local_time(when_iso),
+        "Image": (own["name"] + " (your own image)") if own else (url or "none"),
+        "Text": f"{len(text):,} characters, {len(lines)} lines",
+        "Starts": "“" + clip(body[0]) + "”" if body else None,
+        "Ends": "“" + clip(body[-1]) + "”" if len(body) > 1 else None,
+    }
+
+
 def publish(key, body):
     text = (body.get("text") or "").strip()
     if not text:
@@ -154,12 +171,7 @@ def publish(key, body):
     try:
         PUB["approve"](
             action="Post to LinkedIn now" if body.get("now") else "Schedule a LinkedIn post",
-            preview_text=text,
-            details={
-                "Account": PUB["pid"],
-                "Goes out": local_time(when_iso),
-                "Image": (own["name"] + " (your own image)") if own else (url or "none"),
-            },
+            details=approval_details(text, when_iso, own, url),
         )
     except PUB["Denied"]:
         return 403, {"error": "Not approved. Nothing was sent to Publora."}
