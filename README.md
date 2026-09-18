@@ -2,7 +2,7 @@
 
 A small static web app for planning and tracking a week of LinkedIn posts.
 
-- **Week view** with each day's post status and progress on every activity
+- **Rolling 7-day view**: always today and the next 6 days, with each day's post status and progress on every activity. Posts from before today move to Earlier posts
 - **Tabs for each day**: ✍️ Post, 💬 Comment, 👍 Like, ↩️ Reply, 🔁 Repost. Do any mix on any day, even all of them, and add a post to a day that had none
 - **Activity tracking**: a daily target, a +/− counter, and a list of saved links and notes you tick off as you go (ticking counts it)
 - **Editor + feed preview** showing where LinkedIn's "…see more" cut lands
@@ -24,9 +24,11 @@ python serve.py        # http://127.0.0.1:8080
 
 Repository **Settings → Pages → Build and deployment → Deploy from a branch**, pick `main` and `/ (root)`.
 
-## Plan a new week
+## Plan ahead
 
-Edit `data.js`: change `week.start`, the `days`, and the post texts. Edits you make in the browser are saved in `localStorage` per week (keyed by `week.start`), so a new week starts clean.
+Add days to `data.js` with any date and a unique `id`; the planner picks up whichever fall in the next 7 days, and a date with nothing planned shows as an empty day. A day can come with saved items already in its activity tabs, such as a drafted reply: `todo: { reply: [{ note, text }] }`. Paste the comment's link onto it later to send it through Publora.
+
+Edits you make in the browser are saved in `localStorage` by day `id` (edits from the old weekly planner are brought over on first load). Keep `week:` on the older days as it is: it's the key their images and Publora records were saved under.
 
 ## Schedule or post from the planner
 

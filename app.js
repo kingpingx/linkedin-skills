@@ -2,8 +2,9 @@
   "use strict";
 
   const PLAN = window.PLAN;
-  PLAN.days.sort((a, b) => a.date.localeCompare(b.date)); // days can be moved around in data.js
-  const KEY = "linkedin-week:" + PLAN.week.start;
+  const TZ = PLAN.timezone || "IST";
+  const KEY = "linkedin-planner";
+  const OLD_KEY = "linkedin-week:"; // before the rolling view, edits were saved per week
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const STATUSES = ["draft", "ready", "scheduled", "posted"];
@@ -40,7 +41,21 @@
 
   // ---------- state ----------
   function load() {
-    try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; }
+    try {
+      const saved = localStorage.getItem(KEY);
+      if (saved) return JSON.parse(saved) || {};
+      // First run of the rolling view: bring over what was saved week by week.
+      // Day ids are unique across data.js, so the weeks merge without clashing.
+      const merged = {};
+      Object.keys(localStorage).filter((k) => k.startsWith(OLD_KEY)).sort().forEach((k) => {
+        const old = JSON.parse(localStorage.getItem(k)) || {};
+        ["posts", "extraPosts", "counts", "targets", "logs", "comments"].forEach((f) => {
+          if (old[f]) merged[f] = Object.assign(merged[f] || {}, old[f]);
+        });
+        if (old.checklist) merged.checklist = old.checklist;
+      });
+      return merged;
+    } catch (e) { return {}; }
   }
   const state = Object.assign(
     { posts: {}, extraPosts: {}, counts: {}, targets: {}, logs: {}, checklist: {}, selected: null, tab: null },
@@ -57,11 +72,32 @@
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage blocked */ }
   }
 
-  const items = () => PLAN.days.concat(PLAN.previous);
-  const find = (id) => items().find((d) => d.id === id);
-  const isDay = (d) => PLAN.days.includes(d);
   const hasPost = (d) => d.kind === "post" || !!state.extraPosts[d.id];
-  const postDays = () => PLAN.days.filter(hasPost);
+
+  // The planner always shows today and the next 6 days. A date with nothing in
+  // data.js gets an empty day; anything with a post before today moves to Earlier posts.
+  const pad = (n) => String(n).padStart(2, "0");
+  const isoOf = (t) => t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate());
+  function addDays(iso, n) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return isoOf(new Date(y, m - 1, d + n));
+  }
+  const TODAY = isoOf(new Date());
+  const WINDOW = Array.from({ length: 7 }, (_, i) => addDays(TODAY, i));
+  const blankDay = (iso) => ({ id: "d-" + iso, date: iso, kind: "open" });
+  const DAYS = WINDOW.map((iso) => PLAN.days.find((d) => d.date === iso) || blankDay(iso));
+  const EARLIER = PLAN.days.filter((d) => d.date < TODAY && hasPost(d))
+    .concat(Object.keys(state.extraPosts)
+      .map((id) => /^d-(\d{4}-\d{2}-\d{2})$/.exec(id))
+      .filter((m) => m && m[1] < TODAY)
+      .map((m) => blankDay(m[1])))
+    .concat(PLAN.previous || [])
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const items = () => DAYS.concat(EARLIER);
+  const find = (id) => items().find((d) => d.id === id);
+  const isDay = (d) => DAYS.includes(d);
+  const postDays = () => DAYS.filter(hasPost);
   const timeOf = (d) => (state.extraPosts[d.id] && state.extraPosts[d.id].time) || d.time || "";
 
   const textOf = (p) => (state.posts[p.id] && state.posts[p.id].text != null ? state.posts[p.id].text : p.text || "");
@@ -99,7 +135,8 @@
     state.targets[d.id] = Object.assign({}, state.targets[d.id], { [key]: Math.max(0, n) });
     save();
   }
-  const logOf = (d, key) => (state.logs[d.id] && state.logs[d.id][key]) || [];
+  // A day in data.js can come with saved items already in place (todo: { reply: [...] }).
+  const logOf = (d, key) => (state.logs[d.id] && state.logs[d.id][key]) || (d.todo && d.todo[key]) || [];
   function setLog(d, key, list) {
     state.logs[d.id] = Object.assign({}, state.logs[d.id], { [key]: list });
     save();
@@ -115,8 +152,7 @@
     return new Date(y, m - 1, d);
   }
   function todayISO() {
-    const t = new Date();
-    return t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0");
+    return isoOf(new Date());
   }
   function dayLabel(iso) {
     const d = parseDate(iso);
@@ -192,8 +228,13 @@
       };
     });
   }
-  const imgKey = (id) => KEY + ":" + id;              // IndexedDB key
-  const fileKey = (id) => PLAN.week.start + ":" + id; // images.json key
+  // "<date>:<id>" names a post's image in images.json and its record in published.json.
+  // Posts from the old weekly planner keep the week they were saved under (week: in data.js).
+  function fileKey(id) {
+    const d = find(id);
+    return ((d && (d.week || d.date)) || TODAY) + ":" + id;
+  }
+  const imgKey = (id) => OLD_KEY + fileKey(id);       // IndexedDB key
   // With `python serve.py`, your own images are saved as base64 in images.json
   // (one per post, replaced on a new upload). Without it, they stay in this browser.
   let fileStore = false;
@@ -299,7 +340,7 @@
 
   function renderWeek() {
     const today = todayISO();
-    $("week").innerHTML = PLAN.days.map((d) => {
+    $("week").innerHTML = DAYS.map((d) => {
       let sub;
       let badge = "";
       if (hasPost(d)) {
@@ -349,9 +390,9 @@
     const el = $("detail");
     if (!d) { el.innerHTML = "<p>Pick a day above.</p>"; return; }
 
-    // Earlier posts (before this week) only have the post editor.
+    // Earlier posts (before today) only have the post editor.
     if (!isDay(d)) {
-      el.innerHTML = "<h2>" + esc(dayLabel(d.date)) + " · " + esc(d.time) + " " + esc(PLAN.week.timezone) + "</h2>" +
+      el.innerHTML = "<h2>" + esc(dayLabel(d.date)) + " · " + esc(timeOf(d)) + " " + esc(TZ) + "</h2>" +
         postMetaHTML(d) + postEditorHTML(d);
       initPostEditor(d);
       return;
@@ -361,6 +402,7 @@
     let intro = "";
     if (d.kind === "off") intro = "Rest day. Nothing is planned, but you can still add anything below.";
     else if (d.kind === "comment") intro = d.title + ": no post planned, the focus is engaging with others.";
+    else if (d.kind === "open" && !hasPost(d)) intro = "Nothing planned yet. Engage with others below, or add a post.";
 
     el.innerHTML =
       "<h2>" + esc(dayLabel(d.date)) + "</h2>" +
@@ -389,7 +431,7 @@
       return '<div class="row"><label>Goes out at <input class="field" type="time" id="postTime" value="' + esc(timeOf(d)) + '"></label>' +
         '<span class="chip">Your own post</span></div>';
     }
-    return '<p class="muted">Goes out at ' + esc(timeOf(d)) + " " + esc(PLAN.week.timezone) + "</p>" +
+    return '<p class="muted">Goes out at ' + esc(timeOf(d)) + " " + esc(TZ) + "</p>" +
       '<div class="chips">' +
       [d.pillar, d.format, d.formula, d.goal ? "Goal: " + d.goal : ""].filter(Boolean)
         .map((c) => '<span class="chip">' + esc(c) + "</span>").join("") +
@@ -617,11 +659,22 @@
   const SENT_LABEL = { like: "Reacted", comment: "Commented", reply: "Replied", repost: "Reposted" };
   const engageBusy = {}; // "<day>:<tab>:<index>" -> message
 
+  const LINK_PH = {
+    comment: "Paste the post's link to comment from here",
+    reply: "Paste the comment's link (… on the comment → Copy link to comment)",
+    repost: "Paste the post's link to repost from here",
+  };
   function engageHTML(d, key, it, i) {
     if (it.sent) return '<span class="sent">✓ ' + SENT_LABEL[key] + " via Publora · " + esc(fmtWhen(it.sent.at)) + "</span>";
-    if (!isHttp(it.url) || !publora.enabled) return "";
+    const hasUrl = isHttp(it.url);
+    const canSend = hasUrl && publora.enabled;
+    // A drafted comment or reply stays visible even before it has a link or serve.py is running.
+    const draft = key !== "like" && it.text != null;
+    if (!canSend && !draft) return "";
     const b = engageBusy[d.id + ":" + key + ":" + i];
     const msg = b ? '<p class="pub-msg">' + esc(b) + "</p>" : "";
+    const linkField = hasUrl ? "" : '<input class="field" type="url" data-eurl="' + i + '" placeholder="' +
+      esc(LINK_PH[key]) + '" aria-label="Link">';
     if (key === "like") {
       return '<div class="engage"><select class="field" data-react="' + i + '" aria-label="Reaction">' +
         REACTIONS.map(([v, l]) => '<option value="' + v + '"' + ((it.reaction || "LIKE") === v ? " selected" : "") + ">" + l + "</option>").join("") +
@@ -633,9 +686,11 @@
       repost: "Your thoughts on top (optional)",
     }[key];
     const label = { comment: "Post comment", reply: "Post reply", repost: "Repost" }[key];
-    return '<div class="engage"><textarea class="field" rows="2" data-etext="' + i + '" placeholder="' + esc(ph) + '">' +
+    return '<div class="engage">' + linkField +
+      '<textarea class="field" rows="' + (draft ? 6 : 2) + '" data-etext="' + i + '" placeholder="' + esc(ph) + '">' +
       esc(it.text || "") + "</textarea>" +
-      '<button class="btn" data-engage="' + i + '">' + label + " via Publora</button></div>" + msg;
+      (canSend ? '<button class="btn" data-engage="' + i + '">' + label + " via Publora</button>" : "") +
+      "</div>" + msg;
   }
 
   async function sendEngage(d, key, i) {
@@ -731,15 +786,15 @@
     const placeholders = posts.reduce((n, p) => n + (textOf(p).match(PLACEHOLDER) || []).length, 0);
 
     const actRows = DO_ACTS.map((a) => {
-      const done = PLAN.days.reduce((n, d) => n + countOf(d, a.key), 0);
-      const goal = PLAN.days.reduce((n, d) => n + targetOf(d, a.key), 0);
+      const done = DAYS.reduce((n, d) => n + countOf(d, a.key), 0);
+      const goal = DAYS.reduce((n, d) => n + targetOf(d, a.key), 0);
       if (!done && !goal) return "";
       return '<div class="stat"><span>' + a.icon + " " + a.plural + "</span><strong>" + done + (goal ? " / " + goal : "") + "</strong></div>" +
         (goal ? '<div class="bar"><span style="width:' + pct(done, goal) + '%"></span></div>' : "");
     }).join("");
 
     $("progress").innerHTML =
-      "<h3>This week</h3>" +
+      "<h3>Next 7 days</h3>" +
       '<div class="stat"><span>✍️ Posts scheduled or posted</span><strong>' + doneish + " / " + posts.length + "</strong></div>" +
       '<div class="bar"><span style="width:' + pct(doneish, posts.length) + '%"></span></div>' +
       actRows +
@@ -751,10 +806,10 @@
         '<label><input type="checkbox" data-check="' + i + '"' + (checkedOf(i) ? " checked" : "") + "> <span>" + esc(c.text) + "</span></label>"
       ).join("") + "</div>";
 
-    $("previous").innerHTML = "<h3>Earlier posts</h3>" + (PLAN.previous.length
-      ? PLAN.previous.map((p) =>
-        '<button class="prev-item" data-id="' + p.id + '"><strong>' + esc(dayLabel(p.date)) + " · " + esc(p.time) + "</strong>" +
-        '<span class="muted" style="font-size:13px">' + esc(p.angle) + "</span>" +
+    $("previous").innerHTML = "<h3>Earlier posts</h3>" + (EARLIER.length
+      ? EARLIER.map((p) =>
+        '<button class="prev-item" data-id="' + p.id + '"><strong>' + esc(dayLabel(p.date)) + " · " + esc(timeOf(p)) + "</strong>" +
+        '<span class="muted" style="font-size:13px">' + esc(p.angle || "Your own post") + "</span>" +
         '<span class="status s-' + statusOf(p) + '">' + statusOf(p) + "</span></button>"
       ).join("")
       : "<p class='muted'>None yet.</p>");
@@ -953,6 +1008,16 @@
       setCount(d, key, countOf(d, key) + (e.target.checked ? 1 : -1));
       renderDetail();
       refreshCounter(d, key);
+    } else if (e.target.dataset.eurl != null && d) {
+      // A link pasted onto a saved draft turns on its Publora button.
+      const url = e.target.value.trim();
+      if (!isHttp(url)) return;
+      const key = currentTab(d);
+      const list = logOf(d, key).slice();
+      const i = Number(e.target.dataset.eurl);
+      list[i] = Object.assign({}, list[i], { url });
+      setLog(d, key, list);
+      renderDetail();
     } else if (e.target.dataset.react != null && d) {
       const key = currentTab(d);
       const list = logOf(d, key).slice();
@@ -986,8 +1051,10 @@
       image: !attachOf(p) ? null : isLocal(imageOf(p)) ? "your own file: " + imageOf(p).slice(6) : imageOf(p),
     });
     const out = {
-      week: PLAN.week,
-      days: PLAN.days.map((d) => ({
+      from: WINDOW[0],
+      to: WINDOW[6],
+      timezone: TZ,
+      days: DAYS.map((d) => ({
         id: d.id,
         date: d.date,
         post: hasPost(d) ? postOut(d) : null,
@@ -995,27 +1062,33 @@
           done: countOf(d, a.key), target: targetOf(d, a.key), saved: logOf(d, a.key),
         }])),
       })),
-      earlierPosts: PLAN.previous.map((p) => Object.assign({ id: p.id, date: p.date }, postOut(p))),
+      earlierPosts: EARLIER.map((p) => Object.assign({ id: p.id, date: p.date }, postOut(p))),
       checklist: PLAN.checklist.map((c, i) => ({ text: c.text, done: checkedOf(i) })),
     };
     const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "linkedin-week-" + PLAN.week.start + ".json";
+    a.download = "linkedin-plan-" + TODAY + ".json";
     a.click();
     URL.revokeObjectURL(a.href);
   });
 
   $("resetAllBtn").addEventListener("click", () => {
-    if (!confirm("Clear all edits, statuses, activity counts, and saved links for this week?")) return;
+    if (!confirm("Clear all edits, statuses, activity counts, and saved links?")) return;
     items().forEach((p) => { if (isLocal(imageOf(p))) dropLocal(p.id); });
-    try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
     Object.assign(state, { posts: {}, extraPosts: {}, counts: {}, targets: {}, logs: {}, checklist: {} });
+    save(); // an empty save, not a removal, so the old weekly saves aren't brought back on reload
     renderAll();
   });
 
   // ---------- boot ----------
-  $("weekLabel").textContent = PLAN.week.label + " · times in " + PLAN.week.timezone;
+  save(); // the first run stores what it brought over from the weekly saves
+  $("weekLabel").textContent = "Today and the next 6 days: " + dayLabel(WINDOW[0]) + " – " + dayLabel(WINDOW[6]) +
+    " · times in " + TZ;
+  // Left open past midnight: move the window on when you come back to the tab.
+  const rollOver = () => { if (!document.hidden && todayISO() !== TODAY) location.reload(); };
+  document.addEventListener("visibilitychange", rollOver);
+  window.addEventListener("focus", rollOver);
   // The address can point at a day and tab, e.g. #wed/comment.
   function readHash() {
     const [id, tab] = decodeURIComponent(location.hash.slice(1)).split("/");
@@ -1025,8 +1098,7 @@
     return true;
   }
   if (!readHash() && !find(state.selected)) {
-    const today = PLAN.days.find((d) => d.date === todayISO());
-    state.selected = (today || postDays()[0] || PLAN.days[0]).id;
+    state.selected = DAYS[0].id; // today
   }
   renderAll();
   syncHash();

@@ -1,15 +1,15 @@
-// The week's plan. Edit this file to plan a new week; your in-browser edits
-// are saved separately (localStorage) and keyed by week.start.
+// Everything planned, on any date. The planner always shows today and the next
+// 6 days: a date with nothing here gets an empty day, and posts from before today
+// move to Earlier posts. Keep every id unique across this file (your browser edits
+// are saved by id). `week:` on the older posts is the week they were first saved
+// under, which keeps their images and Publora records attached; leave it as is.
 window.PLAN = {
-  week: {
-    start: "2026-09-14",
-    label: "Mon 14 – Sun 20 Sep 2026",
-    timezone: "IST",
-  },
+  timezone: "IST",
 
   days: [
     {
       id: "mon",
+      week: "2026-09-14",
       date: "2026-09-14",
       kind: "comment",
       title: "Commenting day",
@@ -19,6 +19,7 @@ window.PLAN = {
     },
     {
       id: "thu",
+      week: "2026-09-14",
       date: "2026-09-17",
       kind: "post",
       time: "08:00",
@@ -60,6 +61,7 @@ What analogy finally made async click for you?
     },
     {
       id: "wed",
+      week: "2026-09-14",
       date: "2026-09-16",
       kind: "post",
       time: "09:30",
@@ -125,39 +127,8 @@ What's the most confident “X is dead” prediction you've seen in tech?
 #Angular #AI`,
     },
     {
-      id: "sat",
-      date: "2026-09-19",
-      kind: "post",
-      time: "08:00",
-      pillar: "Community",
-      format: "Text",
-      formula: "F14 Named Gratitude",
-      goal: "Reposts",
-      angle: "Thank-you to .NET open-source maintainers",
-      note: "When you post it, @-mention the maintainers in LinkedIn's post editor if they're on LinkedIn. Keep only the libraries you actually use.",
-      commentTarget: 10,
-      whom: "Open-source maintainers and DevOps people posting about Docker or GitHub Actions",
-      how: "Thank them for something specific, or add a tip",
-      text: `To Nicholas Blumhardt, Marc Gravell, Nick Craver, Brad Wilson, and Jeremy Skinner: thank you for the code I didn't have to write.
-
-Nicholas created Serilog, and structured logging stopped being something only big companies did. [When a batch job fails, the first thing I open is a log Serilog wrote.]
-
-Marc and Nick built Dapper at Stack Overflow and gave it away. It's still the shortest path I know from a SQL query to a C# object.
-
-Brad co-created xUnit.net. [Most of the tests I've written in .NET run on it.]
-
-Jeremy has maintained FluentValidation for years. [Every request model in our ASP.NET Core APIs is validated with it.]
-
-2025 was a reminder that none of this is guaranteed. AutoMapper, MediatR and FluentAssertions moved to commercial licenses, and a lot of teams found out how much they relied on one person's spare time.
-
-Maintainers owe us nothing. We owe them at least a thank-you, and maybe a sponsorship.
-
-Which open-source library would your .NET stack fall apart without?
-
-#dotnet #opensource`,
-    },
-    {
       id: "fri",
+      week: "2026-09-14",
       date: "2026-09-18",
       kind: "post",
       time: "08:30",
@@ -192,14 +163,211 @@ What have you looked up more than 20 times?
 
 #softwareengineering #dotnet`,
     },
-    { id: "tue", date: "2026-09-15", kind: "off" },
-    { id: "sun", date: "2026-09-20", kind: "off" },
+    { id: "tue", week: "2026-09-14", date: "2026-09-15", kind: "off" },
+    {
+      id: "sun-20",
+      week: "2026-09-20",
+      date: "2026-09-19",
+      kind: "post",
+      time: "09:30",
+      pillar: "Teaching",
+      format: "Text + GIF",
+      formula: "Story walk-through (one alert, start to finish)",
+      image: "local:rabbitmq-flow.gif",
+      goal: "Saves",
+      angle: "What happens to a failed RabbitMQ message, and why the dead-letter queue is where you look back",
+      note: "Weekend posts reach 30-50% fewer people than weekday ones. Before sending, check three things: each consumer has its own channel, the connection lock guards opening the connection, and fire/smoke alerts travel through RabbitMQ.",
+      todo: {
+        reply: [
+          {
+            note: "A commenter asked “What about deadlock?” on your async/await post (Thu 17). A shorter 291-character version is in your local drafts file.",
+            text: `Deadlock is the restaurant with a house rule: the waiter who took the order has to be the one who serves it. That's the SynchronizationContext on a WPF/WinForms UI thread, or in old ASP.NET.
+
+That waiter calls .Result and stands at the kitchen door. The food is ready, but only that waiter may carry it out, and that waiter is busy waiting for the food. Nobody moves.
+
+ASP.NET Core has no such rule, so there you get starvation instead of a deadlock. The fix is the same: await all the way, and ConfigureAwait(false) in library code so any waiter can carry the plate.`,
+            done: false,
+          },
+        ],
+      },
+      commentTarget: 10,
+      whom: "People posting about RabbitMQ, messaging, and event-driven .NET",
+      how: "Share a failure mode you've hit and what you did about it",
+      text: `3 things can happen to a failed RabbitMQ message: it vanishes, it keeps coming back, or it waits in a dead-letter queue.
+
+Only the last one lets you look back and find out why it failed.
+
+We build a video analytics platform. Cameras pick up faces, number plates, traffic and smoke, and those events travel through RabbitMQ, a message queue, before they reach a screen.
+
+So picture one smoke alert at 2:14 AM, and follow it.
+
+It lands in a queue with several workers pulling from it. If one worker is slow, the others keep going.
+
+Worker B picks it up. RabbitMQ doesn't delete the alert yet. It waits for B to say "done".
+
+B crashes halfway through. "Done" never arrives, so RabbitMQ puts the alert back and worker C takes it. Nobody has to notice.
+
+C finishes and says "done" on the same channel the alert came in on. A channel is a lane inside the connection, and RabbitMQ only accepts the "done" on the lane that delivered the alert.
+
+Now picture a broken message that fails every time. Put it back in the queue and it comes straight back, over and over.
+
+So what do you do with a message that will never succeed?
+
+You stop retrying it. Ours goes to a dead-letter queue (DLQ), where we can open it the next morning and see why it failed.
+
+That only works because every message carries its metadata in the headers. A dead message that can't say where it came from is just noise.
+
+Under all of it, the app opens one connection to RabbitMQ behind a lock, so two threads starting at once can't open two.
+
+We added these one at a time: acknowledgements, dead-letter queues, metadata, more consumers, the connection lock.
+
+A queue that works in a demo and a queue you'd trust with a fire alert are two different things.
+
+What did you add to your message queue only after it bit you?
+
+P.S. The GIF follows three messages through this whole trip. Watch m2, the one that would have been lost.
+
+#RabbitMQ #dotnet`,
+    },
+    {
+      id: "tue-22",
+      date: "2026-09-21",
+      kind: "post",
+      time: "09:30",
+      pillar: "Build log",
+      format: "Text + GIF",
+      formula: "F20 Diverging-Curves close",
+      image: "local:modules-tests.gif",
+      goal: "Reposts",
+      angle: "7 modules, and the test project that keeps them apart",
+      note: "Check the events module dates (Nov 2025 to Apr 2026) and that the architecture tests run with the rest of the suite.",
+      commentTarget: 10,
+      whom: "Clean architecture and modular monolith voices in .NET",
+      how: "Add the layer rule you enforce and how",
+      text: `7 modules, 7 sets of EF Core migrations, and one test project that fails the moment a layer reaches where it shouldn't.
+
+That's our .NET 8 video analytics backend today. From November 2025 to April 2026 I pulled the events engine out of the main project into its own module. FRS, Actions, Dashboard and Report followed this year. With Logs and Schedule, that makes 7.
+
+A lot of what I was pulling apart, I had written myself in 2023 and 2024.
+
+Each module now owns its own:
+
+→ EF Core migrations (the scheduler even has its own schema)
+→ presentation registration, so the host just asks each module to register itself
+→ MediatR handlers
+→ cached entities, deep-copied on the way out so one module can't change what another is reading
+
+7 modules also means 7 places to take a shortcut. The architecture tests are what stop that. They check layer dependencies and naming conventions every time the suite runs, so a domain layer that references infrastructure fails the test run before anyone reviews it.
+
+Rules that live in code review get looser as deadlines get closer. Rules that live in a test are as strict on release day as they were on day one.
+
+What's the first layering rule you'd put in a test?
+
+P.S. Wednesday: the one piece of this system I've rewritten twice.
+
+#dotnet #softwarearchitecture`,
+    },
+    {
+      id: "wed-23",
+      date: "2026-09-23",
+      kind: "post",
+      time: "08:30",
+      pillar: "Personal",
+      format: "Text + GIF",
+      formula: "F3 Year-over-Year Pivot",
+      image: "local:export-rewrites.gif",
+      goal: "Comments",
+      angle: "The export engine I rewrote twice in 19 months",
+      note: "Check that you wrote the original export (2023) before both rewrites.",
+      commentTarget: 10,
+      whom: "People posting about refactoring, rewrites, and legacy code",
+      how: "Share what your own rewrite taught you",
+      text: `In December 2024 I rewrote our export engine.
+
+In July 2026 I rewrote it again.
+
+19 months apart, and I'd written the version before both of them too.
+
+The exports are what people take out of our video analytics system, often Excel files with face and number-plate images embedded.
+
+Rewrite 1 was about flexibility:
+
+→ export strategies: straight from the database, or built in memory
+→ requests driven by config, with export properties loaded from the DB instead of hardcoded
+→ a CSV writer and one combined ZIP
+→ cancellation tokens, so a big export can be stopped halfway
+
+Then the reports kept coming. Person In-Time, ANPR Vehicle Flow, ANPR Vehicle In-Time, Frequent Visitors and Days-Exceeded Visitors all shipped between the two rewrites. That's 5 new reports.
+
+Rewrite 2 was about making every export behave the same way:
+
+→ one export contract that every provider implements
+→ a lifecycle status the UI reads to show where an export is
+→ an image pipeline, cancellation, and EPPlus upgraded to 8.5.3
+
+The awkward part of rewriting your own code twice: there's no previous developer to blame. I was the previous developer.
+
+What's the piece of your own code you've rewritten the most times?
+
+#dotnet #softwareengineering`,
+    },
+    {
+      id: "fri-25",
+      date: "2026-09-25",
+      kind: "post",
+      time: "08:30",
+      pillar: "Teaching",
+      format: "Text + GIF",
+      formula: "F15 Explain-to-Kids (spreadsheet analogy)",
+      image: "local:angular-signals.gif",
+      goal: "Saves",
+      angle: "Angular Signals explained as a spreadsheet, with pros and cons",
+      note: "Not about your work: a pure teaching post. Friday after 2 PM reaches fewer people, so keep it in the morning.",
+      commentTarget: 10,
+      whom: "Angular voices and frontend peers posting about signals, RxJS, or zoneless",
+      how: "Add a signals gotcha or a migration tip they didn't mention",
+      text: `3 functions are all you need to understand Angular Signals: signal(), computed() and effect().
+
+The easiest way to learn them is a spreadsheet.
+
+A signal is a cell. Cell A1 holds 5.
+const price = signal(5);
+
+computed() is a formula cell. B1 = A1 × 2, and it updates by itself when A1 changes.
+const total = computed(() => price() * 2);
+
+effect() is something that should happen whenever a cell changes, like logging it or saving it.
+effect(() => console.log(total()));
+
+Change the cell with price.set(10), and total recalculates and the effect runs. Anything that doesn't read price is left alone.
+
+What you gain:
+
+→ Fine-grained updates. Angular knows exactly which templates read a signal, so it can skip the ones that don't.
+→ Nothing to subscribe to or unsubscribe from, so there's no forgotten subscription leaking memory.
+→ computed() is lazy and cached. It recalculates only when an input changes and something actually reads it.
+→ Signals are the foundation for zoneless Angular, where zone.js no longer has to trigger change detection.
+
+What to watch for:
+
+→ You read a signal by calling it: isLoggedIn(), not isLoggedIn. Without the brackets you're checking the function itself, and a function is always truthy.
+→ Pushing into an array inside a signal doesn't notify anyone, because it's still the same array. Give it a new one: items.update(list => [...list, item]).
+→ Signals hold a value, not a stream. For debouncing or cancelling events over time, RxJS is still the better tool.
+→ effect() is easy to overuse. If an effect sets one signal from another, a computed() is usually what you wanted.
+
+The short version: signals for state, RxJS for events.
+
+Are you moving your Angular app to signals, or keeping RxJS for most of it?
+
+#Angular #WebDevelopment`,
+    },
   ],
 
   // Posts from before this week, kept for reference.
   previous: [
     {
       id: "fri-11",
+      week: "2026-09-14",
       date: "2026-09-11",
       kind: "post",
       time: "08:00",

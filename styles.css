@@ -340,6 +340,7 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
 .engage { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; margin-top: 8px; }
 .engage textarea { flex: 1 1 260px; min-width: 0; min-height: 64px; resize: vertical; }
 .engage select { flex: 0 0 auto; }
+.engage input[data-eurl] { flex: 1 1 100%; }
 .sent { color: var(--ok); font-size: 0.85rem; font-weight: 600; margin-top: 4px; }
 .log .empty-log { border-style: dashed; }
 .log-body { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
