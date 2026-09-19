@@ -1,0 +1,7 @@
+# Your own post images (base64). Unpublished drafts stay off GitHub.
+images.json
+images.json.tmp
+# What serve.py sent to Publora (post IDs and status).
+published.json
+published.json.tmp
+__pycache__/
