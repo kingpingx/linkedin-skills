@@ -9,7 +9,8 @@
   replying, or reposting, pop a Yes/No approval box on your desktop first.
 
 Usage: python serve.py [port]   (default 8080)
-Set LINKEDIN_SKILLS_DIR if the linkedin-skills folder isn't ../LinkedIn.
+It uses the linkedin-skills project this folder sits in (one level up); set
+LINKEDIN_SKILLS_DIR to point it somewhere else.
 """
 import base64
 import datetime
@@ -27,7 +28,7 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
 ROOT = os.path.dirname(os.path.abspath(__file__))
 IMAGES = os.path.join(ROOT, "images.json")
 PUBLISHED = os.path.join(ROOT, "published.json")
-SKILLS_DIR = os.environ.get("LINKEDIN_SKILLS_DIR") or os.path.join(os.path.dirname(ROOT), "LinkedIn")
+SKILLS_DIR = os.environ.get("LINKEDIN_SKILLS_DIR") or os.path.dirname(ROOT)  # planner/ lives inside linkedin-skills
 PUBLORA = "https://api.publora.com/api/v1"
 KEY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}:[A-Za-z0-9_-]{1,40}$")  # "<week start>:<post id>"
 GROUP_ID_RE = re.compile(r"^[0-9a-f]{24}$")

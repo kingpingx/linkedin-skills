@@ -1,6 +1,6 @@
 # LinkedIn Week Planner
 
-A small static web app for planning and tracking a week of LinkedIn posts.
+A small static web app for planning and tracking a week of LinkedIn posts. It lives in `planner/` inside linkedin-skills and uses that project's `.env` and `lib/` to talk to Publora.
 
 - **Rolling 7-day view**: always today and the next 6 days, with each day's post status and progress on every activity. Posts from before today move to Earlier posts
 - **Tabs for each day**: ✍️ Post, 💬 Comment, 👍 Like, ↩️ Reply, 🔁 Repost. Do any mix on any day, even all of them, and add a post to a day that had none
@@ -17,12 +17,13 @@ No build step and no dependencies: plain HTML, CSS, and JavaScript.
 Open `index.html` in a browser, or run the local server (caching off, so edits show on a normal refresh):
 
 ```bash
+cd planner
 python serve.py        # http://127.0.0.1:8080
 ```
 
 ## Host it on GitHub Pages
 
-Repository **Settings → Pages → Build and deployment → Deploy from a branch**, pick `main` and `/ (root)`.
+GitHub Pages deploys a branch only from its root or `/docs`, so publishing `planner/` needs a Pages workflow (GitHub Actions) that uploads this folder. Opened from Pages the planner is read-only for Publora: scheduling needs `serve.py` running on your machine.
 
 ## Plan ahead
 
@@ -37,7 +38,7 @@ With `python serve.py` running, every post has a **Publora** panel at the top of
 - **Not on Publora yet**: pick a time and press **Schedule**, or **Post now**.
 - Once sent it shows the real status from Publora (scheduled, published, failed), with **Check status** and **Cancel on Publora**.
 
-`serve.py` sends the post using `PUBLORA_API_KEY` and `LINKEDIN_PLATFORM_ID` from the linkedin-skills folder's `.env` (it looks in `../LinkedIn`; set `LINKEDIN_SKILLS_DIR` to change that), so your key never reaches the browser. **Schedule** and **Post now** ask you to confirm in the page (time, image, length, first line) and then send; the desktop Yes box is off for these by choice. **Cancel**, and the like/comment/reply/repost buttons below, still pop a **Yes/No approval box** on your desktop first. A post with your own image goes through Publora's upload flow (draft, upload the image, then schedule). What was sent is recorded in `published.json` (git-ignored).
+`serve.py` sends the post using `PUBLORA_API_KEY` and `LINKEDIN_PLATFORM_ID` from the linkedin-skills `.env` one level up (set `LINKEDIN_SKILLS_DIR` to use a different folder), so your key never reaches the browser. **Schedule** and **Post now** ask you to confirm in the page (time, image, length, first line) and then send; the desktop Yes box is off for these by choice. **Cancel**, and the like/comment/reply/repost buttons below, still pop a **Yes/No approval box** on your desktop first. A post with your own image goes through Publora's upload flow (draft, upload the image, then schedule). What was sent is recorded in `published.json` (git-ignored).
 
 ## Like, comment, reply, and repost
 
