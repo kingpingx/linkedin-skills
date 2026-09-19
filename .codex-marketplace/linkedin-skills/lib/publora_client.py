@@ -22,6 +22,7 @@ method per action, after the user has approved a draft rendered via
 shared retry decorator.
 """
 from __future__ import annotations
+import json
 import os
 import time
 import random
@@ -30,6 +31,7 @@ from typing import Any, Optional
 import requests
 
 from ._env import load_env
+from .approval import require_human_approval
 
 
 class PubloraError(RuntimeError):
@@ -129,16 +131,14 @@ class PubloraClient:
         comment_id: str,
         platform_id: str,
     ) -> dict[str, Any]:
-        r = self._session.delete(
-            self.BASE_URL + "/linkedin-comments",
-            json={
+        return self._delete(
+            "/linkedin-comments",
+            {
                 "postedId": post_urn,
                 "commentId": comment_id,
                 "platformId": platform_id,
             },
-            timeout=self.timeout,
         )
-        return self._handle(r)
 
     # ---- LinkedIn reactions -----------------------------------------------
 
@@ -315,10 +315,22 @@ class PubloraClient:
 
     # ---- Internals --------------------------------------------------------
 
-    @_retry()
+    # Every write goes through _post or _delete, which ask the human first
+    # (see lib/approval.py). The gate sits outside the retry loop so a
+    # transient failure never asks twice.
+
     def _post(self, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
-        r = self._session.post(
-            self.BASE_URL + path, json=json_body, timeout=self.timeout
+        require_human_approval(**_describe("POST", path, json_body))
+        return self._send("POST", path, json_body)
+
+    def _delete(self, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
+        require_human_approval(**_describe("DELETE", path, json_body))
+        return self._send("DELETE", path, json_body)
+
+    @_retry()
+    def _send(self, method: str, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
+        r = self._session.request(
+            method, self.BASE_URL + path, json=json_body, timeout=self.timeout
         )
         return self._handle(r)
 
@@ -331,3 +343,46 @@ class PubloraClient:
                 body = {"error": r.text[:500]}
             raise PubloraError(f"HTTP {r.status_code}: {body}")
         return r.json()
+
+
+def _describe(method: str, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Turn a Publora request into the human-readable approval summary."""
+    account = body.get("platformId")
+    if method == "DELETE":
+        return {
+            "action": "Delete a comment",
+            "target": body.get("postedId"),
+            "details": {"Comment ID": body.get("commentId"), "Account": account},
+        }
+    if path == "/linkedin-comments":
+        parent = body.get("parentComment")
+        return {
+            "action": "Reply to a comment" if parent else "Comment on a post",
+            "preview_text": body.get("message", ""),
+            "target": body.get("postedId"),
+            "details": {"Parent comment": parent, "Account": account},
+        }
+    if path == "/linkedin-reactions":
+        return {
+            "action": f"React {body.get('reactionType')}",
+            "target": body.get("postedId"),
+            "details": {"Account": account},
+        }
+    if path == "/create-post":
+        return {
+            "action": "Create a post",
+            "preview_text": body.get("content", ""),
+            "details": {
+                "Accounts": ", ".join(body.get("platforms") or []),
+                "Scheduled (UTC)": body.get("scheduledTime") or "none, saved as a draft",
+                "Media": ", ".join(body.get("mediaUrls") or []),
+            },
+        }
+    if path == "/linkedin-reshare":
+        return {
+            "action": "Reshare a post",
+            "preview_text": body.get("commentary", ""),
+            "target": body.get("parent"),
+            "details": {"Visibility": body.get("visibility"), "Account": account},
+        }
+    return {"action": f"{method} {path}", "preview_text": json.dumps(body, ensure_ascii=False)}

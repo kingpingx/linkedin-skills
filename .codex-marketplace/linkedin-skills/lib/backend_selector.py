@@ -32,6 +32,7 @@ import subprocess
 from typing import Any, Literal, Optional
 
 from ._env import load_env
+from .approval import require_human_approval
 
 load_env()
 
@@ -270,6 +271,12 @@ def publish(
             "target_url": target_url,
             **kwargs,
         }
+        require_human_approval(
+            action=f"Send a {kind} to your custom poster",
+            preview_text=draft_text,
+            target=target_url,
+            details={"Command": cmd},
+        )
         # User's poster receives JSON on stdin and the kind/target as argv.
         argv = shlex.split(cmd) + [kind, target_url]
         proc = subprocess.run(
